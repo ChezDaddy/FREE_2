@@ -1228,14 +1228,14 @@ function renderAllReceipts() {
   const cont = document.getElementById('all-receipts-container');
   if (!all.length) { cont.innerHTML='<div class="empty-state"><span class="empty-icon">📭</span><div>Aucun reçu trouvé.</div></div>'; return; }
   cont.innerHTML = `<table class="receipts-table"><thead><tr>
-    <th>Café</th><th>Donateur</th><th>Montant</th><th>Date</th><th>Mode</th><th>Statut</th><th></th>
+    <th>Type</th><th>Café</th><th>Donateur</th><th>Montant</th><th>Date</th><th>Statut</th><th></th>
   </tr></thead><tbody>
     ${all.map(r=>`<tr>
+      <td><span class="badge ${(r.donType==='entreprise'||r.id?.startsWith('RE'))?'badge-edited':'badge-draft'}" style="font-size:11px;font-weight:700;">${(r.donType==='entreprise'||r.id?.startsWith('RE'))?'E':'P'}</span></td>
       <td><strong>${r.cafeName}</strong></td>
       <td>${r.donType==='entreprise'?'🏢 ':''} ${r.prenom} ${r.nom}<br><small style="color:var(--ash)">${r.donType==='entreprise'?(r.entreprise?.formeJuridique||'Entreprise'):r.email||''}</small></td>
       <td><strong>${formatAmount(r.montant)} €</strong></td>
       <td>${formatDate(r.date)}</td>
-      <td style="font-size:11px;color:var(--ash)">${formatType(r.type||'')}</td>
       <td><span class="badge ${r.sent?'badge-sent':r.generated?'badge-edited':'badge-draft'}">${r.sent?'✓ Téléchargé':r.generated?'📄 Édité':'⬜ Non édité'}</span></td>
       <td style="display:flex;gap:5px;">
         <button class="btn btn-secondary btn-sm" onclick="downloadReceipt('${r.cafeId}','${r.id}')">⬇ PDF</button>
@@ -1500,12 +1500,12 @@ function refreshCafeReceipts() {
   const cont=document.getElementById('cafe-receipts-container');
   const sorted=[...cafe.receipts].sort((a,b)=>new Date(b.date)-new Date(a.date));
   if (!sorted.length) { cont.innerHTML='<div class="empty-state"><span class="empty-icon">📬</span><div>Aucun reçu. Créez votre premier !</div></div>'; return; }
-  cont.innerHTML=`<table class="receipts-table"><thead><tr><th>Donateur</th><th>Montant</th><th>Date</th><th>Mode</th><th>Statut</th><th>Actions</th></tr></thead><tbody>
+  cont.innerHTML=`<table class="receipts-table"><thead><tr><th>Type</th><th>Donateur</th><th>Montant</th><th>Date</th><th>Statut</th><th>Actions</th></tr></thead><tbody>
     ${sorted.map(r=>`<tr>
+      <td><span class="badge ${(r.donType==='entreprise'||r.id?.startsWith('RE'))?'badge-edited':'badge-draft'}" style="font-size:11px;font-weight:700;">${(r.donType==='entreprise'||r.id?.startsWith('RE'))?'E':'P'}</span></td>
       <td><strong>${r.prenom} ${r.nom}</strong><br><small style="color:var(--ash)">${r.email}</small></td>
       <td><strong>${formatAmount(r.montant)} €</strong></td>
       <td>${formatDate(r.date)}</td>
-      <td style="font-size:11px;color:var(--ash)">${formatType(r.type)}</td>
       <td><span class="badge ${r.sent?'badge-sent':r.generated?'badge-edited':'badge-draft'}">${r.sent?'✓ Téléchargé':r.generated?'📄 Édité':'⬜ Non édité'}</span></td>
       <td style="display:flex;gap:5px;flex-wrap:wrap;">
         <button class="btn btn-secondary btn-sm" onclick="openResendModal('${r.id}')">👁 Voir</button>
