@@ -1267,7 +1267,7 @@ function exportReceiptsCSV() {
     String(r.montant||0).replace('.',','),
     r.montantLettres||'',
     formatType(r.type||''),
-    r.id||''
+    r.numero_ordre || r.id || ''
   ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(';'));
 
   const csv = BOM + headers.map(h=>`"${h}"`).join(';') + '\n' + rows.join('\n');
