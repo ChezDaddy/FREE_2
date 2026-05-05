@@ -1273,13 +1273,14 @@ function exportReceiptsCSV() {
   if (!all.length) { alert('Aucun reçu à exporter.'); return; }
 
   const BOM = '﻿'; // UTF-8 BOM for Excel
-  const headers = ['Café','Type','Date','Nom','Prénom','Adresse','CP','Commune','Email','Montant (EUR)','Montant en lettres','Mode de versement','SIREN','N° reçu'];
+  const headers = ['Café','Type','Date','SIREN','Nom','Prénom','Adresse','CP','Commune','Email','Montant (EUR)','Montant en lettres','Mode de versement','N° reçu'];
   const rows = all.map(r => {
     const isEnt = r.donType === 'entreprise' || r.id?.startsWith('RE');
     return [
       r.cafeName,
       isEnt ? 'E' : 'P',
       formatDate(r.date),
+      isEnt ? (r.entreprise?.siren || '') : '',
       r.nom||'',
       r.prenom||'',
       r.adresse||'',
@@ -1289,7 +1290,6 @@ function exportReceiptsCSV() {
       String(r.montant||0).replace('.',','),
       r.montantLettres||'',
       formatType(r.type||''),
-      isEnt ? (r.entreprise?.siren || '') : '',
       r.numero_ordre || r.id || ''
     ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(';');
   });
