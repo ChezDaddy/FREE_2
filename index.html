@@ -1769,11 +1769,13 @@ async function generateCerfaPDF(cafe, receipt) {
     // 3. Effacer "Organisme sauvegarde" pré-coché (checkbox widget sans décalage)
     pg1.drawRectangle({ x: 32, y: 102, width: 16, height: 17,
       color: rgb(1,1,1), borderColor: rgb(1,1,1), borderWidth: 0 });
-    // 4. Effacer le cercle pré-coché d'"Association loi 1901" (présent dans le template)
-    //    rect(64,342,72,350) → grand rectangle blanc de sécurité couvrant [338..358]
-    pg1.drawRectangle({ x: 58, y: 484, width: 20, height: 20,
+    // 4. Masquer le bouton radio pré-coché d'"Association loi 1901"
+    //    Rectangle blanc + cercle blanc pour couvrir complètement le rond du template
+    pg1.drawRectangle({ x: 56, y: 482, width: 26, height: 26,
       color: rgb(1,1,1), borderColor: rgb(1,1,1), borderWidth: 0 });
-    // 5. Redessiner "Association loi 1901" coché
+    pg1.drawCircle({ x: 68, y: 496, size: 6,
+      color: rgb(1,1,1), borderColor: rgb(1,1,1), borderWidth: 0 });
+    // 5. Redessiner "Association loi 1901" coché (cercle noir rempli)
     pg1.drawCircle({ x: 68, y: 496, size: 3.5,
       color: rgb(0.05,0.05,0.05), borderColor: rgb(0.05,0.05,0.05), borderWidth: 0 });
 
@@ -1935,8 +1937,8 @@ async function generateCerfaEntreprisePDF(cafe, receipt) {
 
     // ── CASE PRINCIPALE "Oeuvre ou organisme" ────────────────────
     // CAC1 exact : rect(33.903, 375.275, 41.331, 382.584) → centre x=37.6, y_bot=463.0
-    // 'X' size=7 → dessiné depuis baseline/left → décalage -1 en x, -1 en y pour centrage
-    p1.drawText('X', { x: 33, y: 462, size: 7, font: helveticaB, color: rgb(0.05,0.05,0.05) });
+    // Grande coche (✓) centrée dans la case, comme pour le CERFA particulier
+    p1.drawText('✓', { x: 32, y: 461, size: 10, font: helveticaB, color: rgb(0.05,0.05,0.05) });
     // Radio "Association loi 1901" — CAC0#1 exact : rect(55.921,339.041,63.203,346.407) → centre x=59.6, y_bot=499.2
     p1.drawCircle({ x: 59.6, y: 499, size: 3.0,
       color: rgb(0.05,0.05,0.05), borderColor: rgb(0.05,0.05,0.05), borderWidth: 0 });
