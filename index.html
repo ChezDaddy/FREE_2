@@ -869,6 +869,7 @@ async function loadFromSupabase() {
                       sent:           r.sent,
                       filename:       r.filename,
                       pdf_path:       r.pdf_path,
+                      numero_ordre:   r.numero_ordre || '',
                     }))
   }));
 
@@ -894,6 +895,15 @@ async function loadFromSupabase() {
   setOnlineStatus(true);
 }
 
+// Génère le numéro d'ordre : 3 lettres café + année 4 chiffres + rang 6 chiffres (global)
+// Exemple : CAL2026000001
+function generateNumeroOrdre(cafeNom, year) {
+  const prefix = (cafeNom || '???').replace(/[^A-Za-z]/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
+  const allReceipts = store.cafes.flatMap(c => c.receipts || []);
+  const rang = allReceipts.length + 1;
+  return prefix + year + String(rang).padStart(6, '0');
+}
+
 // Sauvegarde d'un reçu (insert ou update)
 async function saveReceipt(cafeId, receipt) {
   const row = {
@@ -913,6 +923,7 @@ async function saveReceipt(cafeId, receipt) {
     sent:           receipt.sent      || false,
     filename:       receipt.filename  || '',
     pdf_path:       receipt.pdf_path  || null,
+    numero_ordre:   receipt.numero_ordre || '',
   };
   try {
     await sb.upsert('receipts', row);
@@ -1572,8 +1583,10 @@ function generateAndPreview() {
   const cafe = store.cafes.find(c=>c.id===currentUser);
   const id = 'R'+Date.now();
   const dateStr = date.replace(/-/g,'');
+  const year = date.substring(0, 4);
   const receipt = { id, prenom, nom, adresse, cp, commune, email, montant, montantLettres, date, type, sent:false, generated:false,
-    filename:`Recu fiscal_${cafe.nom}_${dateStr}_${nom} ${prenom}` };
+    filename:`Recu fiscal_${cafe.nom}_${dateStr}_${nom} ${prenom}`,
+    numero_ordre: generateNumeroOrdre(cafe.nom, year) };
 
   const isEnt = receipt.donType === 'entreprise';
   (isEnt ? generateCerfaEntreprisePDF(cafe, receipt) : generateCerfaPDF(cafe, receipt)).then(pdfBytes => {
@@ -1729,7 +1742,7 @@ async function generateCerfaPDF(cafe, receipt) {
 
     // ── PAGE 1 : ORGANISME ──
     // Numéro d'ordre (top right box)
-    txt(p1, h1, 423, 124, receipt.id, 8);
+    txt(p1, h1, 423, 124, receipt.numero_ordre || receipt.id, 8);
     // Nom ou dénomination
     txt(p1, h1, 36,  179, org.nom || cafe.nom, 8);
     // SIREN/RNA
@@ -1872,7 +1885,7 @@ async function generateCerfaEntreprisePDF(cafe, receipt) {
 
     // ── PAGE 1 : ORGANISME BÉNÉFICIAIRE ──────────────────────────
     // Champs texte nommés du template entreprise (coordonnées exactes garanties)
-    setField('a1',  receipt.id);                          // N° ordre du reçu
+    setField('a1',  receipt.numero_ordre || receipt.id);  // N° ordre du reçu
     // Dénomination : pas de champ nommé → drawText
     const pages = pdfDoc.getPages();
     const p1 = pages[0], p2 = pages[1];
@@ -1923,7 +1936,7 @@ async function generateCerfaEntreprisePDF(cafe, receipt) {
     // ── CASE PRINCIPALE "Oeuvre ou organisme" ────────────────────
     // CAC1 exact : rect(33.903, 375.275, 41.331, 382.584) → centre x=37.6, y_bot=463.0
     // Croix (X) centrée dans la case
-    p1.drawText('X', { x: 33, y: 461, size: 8, font: helveticaB, color: rgb(0.05,0.05,0.05) });
+    p1.drawText('X', { x: 35, y: 461, size: 8, font: helveticaB, color: rgb(0.05,0.05,0.05) });
     // Radio "Association loi 1901" — CAC0#1 exact : rect(55.921,339.041,63.203,346.407) → centre x=59.6, y_bot=499.2
     p1.drawCircle({ x: 59.6, y: 499, size: 3.0,
       color: rgb(0.05,0.05,0.05), borderColor: rgb(0.05,0.05,0.05), borderWidth: 0 });
@@ -2151,6 +2164,7 @@ async function generateAndPreviewEntreprise() {
   const cafe = store.cafes.find(c => c.id === currentUser);
   const id   = 'RE' + Date.now();
   const dateParts = date.replace(/-/g,'');
+  const year = date.substring(0, 4);
   const receipt = {
     id, date, montant, montantLettres, type,
     // Champs entreprise
@@ -2166,6 +2180,7 @@ async function generateAndPreviewEntreprise() {
     generated: false, sent: false,
     filename: `Recu fiscal entreprise_${cafe.nom}_${dateParts}_${denomination}`,
     pdf_path: null,
+    numero_ordre: generateNumeroOrdre(cafe.nom, year),
   };
 
   try {
@@ -2213,7 +2228,7 @@ if (todayInput) todayInput.value = new Date().toISOString().split('T')[0];
 </body>
 </html    // ── PAGE 1 : ORGANISME BÉNÉFICIAIRE ──────────────────────────
     // Coordonnées définitives mesurées sur PDF v7 (200dpi, borders exactes)
-    txt(p1, h1, 420, 133, receipt.id, 8);               // N° ordre
+    txt(p1, h1, 420, 133, receipt.numero_ordre || receipt.id, 8);  // N° ordre
     txt(p1, h1,  30, 192, org.nom || cafe.nom, 8);      // Dénomination org
     txt(p1, h1,  30, 202, org.siren || '', 8);          // SIREN/RNA
     txt(p1, h1,  30, 237, org.num || '', 8);            // N° adresse
