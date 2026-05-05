@@ -1922,9 +1922,8 @@ async function generateCerfaEntreprisePDF(cafe, receipt) {
 
     // ── CASE PRINCIPALE "Oeuvre ou organisme" ────────────────────
     // CAC1 exact : rect(33.903, 375.275, 41.331, 382.584) → centre x=37.6, y_bot=463.0
-    // Gros point noir (même style que radio Assoc loi 1901)
-    p1.drawCircle({ x: 37.6, y: 463, size: 3.5,
-      color: rgb(0.05,0.05,0.05), borderWidth: 0 });
+    // Croix (X) centrée dans la case
+    p1.drawText('X', { x: 33, y: 461, size: 8, font: helveticaB, color: rgb(0.05,0.05,0.05) });
     // Radio "Association loi 1901" — CAC0#1 exact : rect(55.921,339.041,63.203,346.407) → centre x=59.6, y_bot=499.2
     p1.drawCircle({ x: 59.6, y: 499, size: 3.0,
       color: rgb(0.05,0.05,0.05), borderColor: rgb(0.05,0.05,0.05), borderWidth: 0 });
