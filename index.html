@@ -1755,34 +1755,12 @@ async function generateCerfaPDF(cafe, receipt) {
       // Ne pas sélectionner radio_group_12kjqn — "Association loi 1901" dessinée manuellement
       form2.flatten();
     } catch(e) { /* flatten partiel attendu */ }
-    // Corrections VISUELLES après flatten
-    // NB coordonnées exactes extraites du template AcroForm (pymupdf) :
-    //   radio Value_aftr = rect(64,391,72,399), avec décalage visuel +77pt → y_bot = 842-(391+77) = 374
-    //   radio Assoc1901  = rect(64,342,72,350)                              → y_bot = 842-342 = 500
     const pg1 = pdfDoc.getPages()[0];
-    // 1. Effacer "Musée de France" pré-sélectionné — rect(64,408,72,416)+77 → y_bot≈479
-    pg1.drawRectangle({ x: 60, y: 473, width: 16, height: 16,
-      color: rgb(1,1,1), borderColor: rgb(1,1,1), borderWidth: 0 });
-    // 2. Effacer "Fondation universitaire" (Value_aftr) — rect(64,391,72,399) → y_bot=447
-    //    Même approche : rectangle + cercle blanc recouvrant, puis rien (pas re-coché)
-    pg1.drawRectangle({ x: 55, y: 441, width: 28, height: 16,
-      color: rgb(1,1,1), borderWidth: 0 });
-    pg1.drawCircle({ x: 68, y: 447, size: 5,
-      color: rgb(1,1,1), borderColor: rgb(0,0,0), borderWidth: 0.5 });
-    // 3. Effacer "Organisme sauvegarde" pré-coché (checkbox widget sans décalage)
+    // Effacer "Organisme sauvegarde" pré-coché (checkbox widget sans décalage)
     pg1.drawRectangle({ x: 32, y: 102, width: 16, height: 17,
       color: rgb(1,1,1), borderColor: rgb(1,1,1), borderWidth: 0 });
-    // 4. Masquer le bouton radio pré-coché d'"Association loi 1901"
-    //    D'abord un grand rectangle blanc, puis un cercle blanc opaque
-    //    radio_group_12kjqn rect(64,342,72,350) → centre x=68, y_bot=496
-    //    radio_group_13tlyo rect(63,356,71,364) → centre x=67, y_bot=482
-    //    On efface les deux zones pour être sûr
-    pg1.drawRectangle({ x: 55, y: 478, width: 28, height: 22,
-      color: rgb(1,1,1), borderWidth: 0 });
-    // Cercle blanc taille normale du template (size≈4) par-dessus
-    pg1.drawCircle({ x: 68, y: 496, size: 5,
-      color: rgb(1,1,1), borderColor: rgb(0,0,0), borderWidth: 0.5 });
-    // 5. Redessiner "Association loi 1901" coché (cercle noir plein à l'intérieur)
+    // Gros point noir devant "Association loi 1901" — par-dessus tout le reste
+    // radio_group_12kjqn rect(64,342,72,350) → centre x=68, y_bot=496
     pg1.drawCircle({ x: 68, y: 496, size: 3.5,
       color: rgb(0.05,0.05,0.05), borderWidth: 0 });
 
@@ -1944,12 +1922,9 @@ async function generateCerfaEntreprisePDF(cafe, receipt) {
 
     // ── CASE PRINCIPALE "Oeuvre ou organisme" ────────────────────
     // CAC1 exact : rect(33.903, 375.275, 41.331, 382.584) → centre x=37.6, y_bot=463.0
-    // Coche dessinée avec drawSvgPath (évite les problèmes d'encodage WinAnsi)
-    // La case fait ~7.5x7.3pt → coche centrée à x=37.6, y_bot=463
-    p1.drawSvgPath('M 33 460 L 36 457 L 43 465', {
-      x: 0, y: 0, color: rgb(0.05,0.05,0.05), borderColor: rgb(0.05,0.05,0.05),
-      borderWidth: 1.2, scale: 1
-    });
+    // Gros point noir (même style que radio Assoc loi 1901)
+    p1.drawCircle({ x: 37.6, y: 463, size: 3.5,
+      color: rgb(0.05,0.05,0.05), borderWidth: 0 });
     // Radio "Association loi 1901" — CAC0#1 exact : rect(55.921,339.041,63.203,346.407) → centre x=59.6, y_bot=499.2
     p1.drawCircle({ x: 59.6, y: 499, size: 3.0,
       color: rgb(0.05,0.05,0.05), borderColor: rgb(0.05,0.05,0.05), borderWidth: 0 });
