@@ -262,7 +262,7 @@
       <button class="btn btn-primary" onclick="login()">Connexion</button>
     </div>
     <div style="text-align:center;padding:14px 0 4px;border-top:1px solid rgba(0,0,0,0.07);margin-top:8px;">
-      <span style="font-size:11px;color:#B0A898;letter-spacing:0.5px;">v2.0 — Supabase</span>
+      <span style="font-size:11px;color:#B0A898;letter-spacing:0.5px;">v2.1 — Supabase</span>
     </div>
   </div>
 </div>
@@ -1836,13 +1836,13 @@ async function generateCerfaPDF(cafe, receipt) {
     // Article 200 du CGI : coché => on dessine un X
     p2.drawText('X', { x:101, y:h2-447, size:9, font:helveticaB, color:rgb(0.1,0.1,0.8) });
     // Mode de versement (uniquement si don en numéraire) — ligne y_top=582.2 → y_bot=260
-    const modeY = { especes:262, cheque:262, virement:262 };
+    const modeY = { especes:259, cheque:259, virement:259 };
     const modeX = { especes:36, cheque:152, virement:292 };
     if (receipt.type && modeX[receipt.type]) {
       p2.drawText('X', { x:modeX[receipt.type], y:modeY[receipt.type], size:8, font:helveticaB, color:rgb(0.1,0.1,0.8) });
     }
     // Nature du don : Numéraire — ligne y_top=514.3 → y_bot=327.7, case avant x0=44.4
-    p2.drawText('X', { x:36, y:328, size:8, font:helveticaB, color:rgb(0.1,0.1,0.8) });
+    p2.drawText('X', { x:36, y:325, size:8, font:helveticaB, color:rgb(0.1,0.1,0.8) });
     // Forme du don : Declaration don manuel
     p2.drawText('X', { x:294, y:h2-485, size:8, font:helveticaB, color:rgb(0.1,0.1,0.8) });
     // Date signature
