@@ -403,7 +403,10 @@
     <div class="page" id="page-cafe-receipts">
       <div class="page-header">
         <div><div class="page-title" id="cafe-page-title">Mes reçus</div><div class="page-sub" id="cafe-page-sub">Gérer et créer les reçus fiscaux</div></div>
-        <button class="btn btn-cafe" onclick="openDonTypeModal()">+ Créer un reçu</button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="syncLocalReceiptsToSupabase()" title="Renvoyer vers Supabase les reçus restés en cache local uniquement">🔄 Synchroniser</button>
+          <button class="btn btn-cafe" onclick="openDonTypeModal()">+ Créer un reçu</button>
+        </div>
       </div>
       <div class="stats-grid" id="cafe-stats"></div>
       <div class="card" style="padding:0;overflow:hidden;"><div id="cafe-receipts-container"></div></div>
@@ -1514,6 +1517,72 @@ async function clearSignature() {
   document.getElementById('sig-preview').src='';
   document.getElementById('sig-placeholder').style.display='block';
   document.getElementById('clear-sig-btn').style.display='none';
+}
+
+// ── SYNCHRONISATION : renvoie vers Supabase les reçus restés uniquement en cache local ──
+async function syncLocalReceiptsToSupabase() {
+  const localCache = loadCache();
+  if (!localCache) { alert('Aucune donnée en cache local trouvée sur cet appareil.'); return; }
+  const localCafe = localCache.cafes?.find(c => c.id === currentUser);
+  if (!localCafe || !localCafe.receipts?.length) { alert('Aucun reçu en cache local pour ce café.'); return; }
+
+  showSyncSpinner('Vérification Supabase...');
+  let remoteIds = [];
+  try {
+    const remoteRows = await sb.get('receipts', `cafe_id=eq.${encodeURIComponent(currentUser)}&select=id`);
+    remoteIds = remoteRows.map(r => r.id);
+  } catch(e) {
+    hideSyncSpinner();
+    alert('Impossible de contacter Supabase pour vérifier les reçus existants :\n' + e.message);
+    return;
+  }
+
+  const missing = localCafe.receipts.filter(r => !remoteIds.includes(r.id));
+  if (!missing.length) {
+    hideSyncSpinner();
+    alert('✓ Tous les reçus en cache local sont déjà présents dans Supabase. Rien à synchroniser.');
+    return;
+  }
+
+  showSyncSpinner(`Synchronisation de ${missing.length} reçu(s)...`);
+  let ok = 0, fail = 0;
+  const errors = [];
+  for (const r of missing) {
+    try {
+      await sb.upsert('receipts', {
+        id:              r.id,
+        cafe_id:         currentUser,
+        prenom:          r.prenom   || '',
+        nom:             r.nom      || '',
+        adresse:         r.adresse  || '',
+        cp:              r.cp       || '',
+        commune:         r.commune  || '',
+        email:           r.email    || '',
+        montant:         r.montant,
+        montant_lettres: r.montantLettres || '',
+        date_don:        r.date,
+        type_versement:  r.type     || '',
+        generated:       r.generated || false,
+        sent:            r.sent      || false,
+        filename:        r.filename  || '',
+        pdf_path:        r.pdf_path  || null,
+        numero_ordre:    r.numero_ordre || '',
+        don_type:        r.donType   || '',
+        entreprise:      r.entreprise ? JSON.stringify(r.entreprise) : null,
+      });
+      ok++;
+    } catch(e) {
+      fail++;
+      errors.push(`${r.numero_ordre || r.id} : ${e.message}`);
+    }
+  }
+  hideSyncSpinner();
+
+  let msg = `Synchronisation terminée : ${ok} reçu(s) envoyé(s) avec succès vers Supabase.`;
+  if (fail) msg += `\n\n⚠️ ${fail} échec(s) :\n` + errors.join('\n');
+  alert(msg);
+
+  if (ok) { await loadFromSupabase(); refreshCafeReceipts(); }
 }
 
 // ── CAFÉ RECEIPTS ──
