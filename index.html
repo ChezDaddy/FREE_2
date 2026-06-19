@@ -953,7 +953,8 @@ async function saveReceipt(cafeId, receipt) {
     await sb.upsert('receipts', row);
     cacheStore();
   } catch(e) {
-    console.warn('saveReceipt error:', e);
+    console.error('saveReceipt FAILED (reçu non enregistré dans Supabase):', e);
+    alert('⚠️ Le reçu n\'a pas pu être enregistré dans Supabase :\n' + e.message + '\n\nIl est uniquement sauvegardé localement sur cet appareil pour le moment.');
     cacheStore(); // fallback: au moins le cache local
   }
 }
