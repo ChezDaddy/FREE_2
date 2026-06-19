@@ -408,6 +408,7 @@
           <button class="btn btn-cafe" onclick="openDonTypeModal()">+ Créer un reçu</button>
         </div>
       </div>
+      <div id="unsynced-banner" style="display:none;background:#FFF3E0;border:1.5px solid #F5A623;border-radius:11px;padding:14px 18px;margin-bottom:16px;font-size:14px;color:#7A4A00;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;"></div>
       <div class="stats-grid" id="cafe-stats"></div>
       <div class="card" style="padding:0;overflow:hidden;"><div id="cafe-receipts-container"></div></div>
     </div>
@@ -742,6 +743,21 @@ const MASTER_CREDENTIALS = {
 const SUPABASE_URL  = 'https://fxkussqoufndsvgnsqao.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4a3Vzc3FvdWZuZHN2Z25zcWFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczODQxMjYsImV4cCI6MjA5Mjk2MDEyNn0.m4uxz8FJksb_aPbwIsdkFE1Vhs0EnRQzXcyDN5bAMsE';
 
+// ── PING ANTI-PAUSE SUPABASE (même logique que DaddyPay) ──
+// Le plan gratuit Supabase met le projet en pause après 7 jours sans requête.
+// On envoie une requête minimale dès le chargement de la page, puis toutes les 12h
+// tant que l'onglet reste ouvert, pour garder le projet actif sans dépendre d'un
+// service externe.
+async function pingSupabaseKeepAlive() {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/cafes?select=id&limit=1`, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON }
+    });
+  } catch(e) { /* silencieux : un échec de ping n'impacte pas l'usage normal */ }
+}
+pingSupabaseKeepAlive();
+setInterval(pingSupabaseKeepAlive, 12 * 60 * 60 * 1000); // toutes les 12h
+
 // Client Supabase minimal (REST + Storage, sans SDK CDN)
 const sb = {
   headers: {
@@ -954,11 +970,14 @@ async function saveReceipt(cafeId, receipt) {
   };
   try {
     await sb.upsert('receipts', row);
+    delete receipt._unsynced;
     cacheStore();
   } catch(e) {
     console.error('saveReceipt FAILED (reçu non enregistré dans Supabase):', e);
-    alert('⚠️ Le reçu n\'a pas pu être enregistré dans Supabase :\n' + e.message + '\n\nIl est uniquement sauvegardé localement sur cet appareil pour le moment.');
+    alert('⚠️ Le reçu n\'a pas pu être enregistré dans Supabase :\n' + e.message + '\n\nIl est uniquement sauvegardé localement sur cet appareil pour le moment. Pensez à cliquer sur "Synchroniser" une fois le problème résolu, sans recharger la page avant.');
+    receipt._unsynced = true;
     cacheStore(); // fallback: au moins le cache local
+    refreshCafeReceipts();
   }
 }
 
@@ -1571,6 +1590,7 @@ async function syncLocalReceiptsToSupabase() {
         entreprise:      r.entreprise ? JSON.stringify(r.entreprise) : null,
       });
       ok++;
+      delete r._unsynced;
     } catch(e) {
       fail++;
       errors.push(`${r.numero_ordre || r.id} : ${e.message}`);
@@ -1582,6 +1602,7 @@ async function syncLocalReceiptsToSupabase() {
   if (fail) msg += `\n\n⚠️ ${fail} échec(s) :\n` + errors.join('\n');
   alert(msg);
 
+  cacheStore();
   if (ok) { await loadFromSupabase(); refreshCafeReceipts(); }
 }
 
@@ -1591,6 +1612,21 @@ function refreshCafeReceipts() {
   const totalAmt=cafe.receipts.reduce((s,r)=>s+r.montant,0);
   const sent=cafe.receipts.filter(r=>r.sent).length;
   const colorClass = isAdminViewingCafe ? 'admin-color' : 'cafe-color';
+
+  const unsynced = cafe.receipts.filter(r => r._unsynced);
+  const banner = document.getElementById('unsynced-banner');
+  if (banner) {
+    if (unsynced.length) {
+      banner.style.display = 'flex';
+      banner.innerHTML = `
+        <span>⚠️ <strong>${unsynced.length} reçu(s)</strong> non enregistré(s) dans Supabase — uniquement sauvegardé(s) sur cet appareil. Ne fermez pas cette session sans cliquer sur Synchroniser.</span>
+        <button class="btn btn-secondary btn-sm" style="white-space:nowrap;" onclick="syncLocalReceiptsToSupabase()">🔄 Synchroniser maintenant</button>`;
+    } else {
+      banner.style.display = 'none';
+      banner.innerHTML = '';
+    }
+  }
+
   document.getElementById('cafe-stats').innerHTML = `
     <div class="stat-card"><div class="stat-value ${colorClass}">${cafe.receipts.length}</div><div class="stat-label">Reçus créés</div></div>
     <div class="stat-card"><div class="stat-value ${colorClass}">${formatAmount(totalAmt)}</div><div class="stat-label">Total dons (€)</div></div>
