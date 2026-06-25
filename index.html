@@ -576,7 +576,7 @@
             <input type="hidden" id="chef-lundi">
             <button class="btn btn-primary" onclick="generateChef()">Générer</button>
             <button class="btn btn-secondary" onclick="resetChef()">✕ Vider</button>
-            <button class="btn btn-secondary" onclick="printChef()">🖨️ Imprimer</button>
+            <button class="btn btn-primary" onclick="printChef()">💾🖨️ Enregistrer et imprimer</button>
           </div>
         </div>
         <div id="chef-output" class="print-doc-wrap"></div>
@@ -2863,7 +2863,8 @@ async function printChef() {
       await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
       loadChefSavedList();
     } catch(e) {
-      console.warn('Sauvegarde Feuille Chef échouée:', e.message);
+      toast('⚠️ Enregistrement de la feuille échoué : ' + e.message, 'error');
+      console.error('Sauvegarde Feuille Chef échouée:', e);
     }
   }
   const chefInfosHTML = `
@@ -6227,7 +6228,8 @@ async function printChef() {
       await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
       loadChefSavedList();
     } catch(e) {
-      console.warn('Sauvegarde Feuille Chef échouée:', e.message);
+      toast('⚠️ Enregistrement de la feuille échoué : ' + e.message, 'error');
+      console.error('Sauvegarde Feuille Chef échouée:', e);
     }
   }
   const chefInfosHTML = `
@@ -9591,7 +9593,8 @@ async function printChef() {
       await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
       loadChefSavedList();
     } catch(e) {
-      console.warn('Sauvegarde Feuille Chef échouée:', e.message);
+      toast('⚠️ Enregistrement de la feuille échoué : ' + e.message, 'error');
+      console.error('Sauvegarde Feuille Chef échouée:', e);
     }
   }
   const chefInfosHTML = `
@@ -12955,7 +12958,8 @@ async function printChef() {
       await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
       loadChefSavedList();
     } catch(e) {
-      console.warn('Sauvegarde Feuille Chef échouée:', e.message);
+      toast('⚠️ Enregistrement de la feuille échoué : ' + e.message, 'error');
+      console.error('Sauvegarde Feuille Chef échouée:', e);
     }
   }
   const chefInfosHTML = `
