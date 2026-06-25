@@ -431,9 +431,9 @@
               <label>Filtre période</label>
               <select id="hist-filtre" onchange="onHistFiltreChange()" style="width:160px">
                 <option value="semaine">Semaine en cours</option>
-                <option value="mois" selected>Mois en cours</option>
+                <option value="mois">Mois en cours</option>
                 <option value="annee">Année en cours</option>
-                <option value="tout">Tout</option>
+                <option value="tout" selected>Tout</option>
                 <option value="jour">— Jour précis —</option>
                 <option value="semaine-custom">— Semaine ISO —</option>
                 <option value="mois-custom">— Mois précis —</option>
@@ -547,7 +547,7 @@
           <div class="btn-group">
             <div class="form-group">
               <label>Lundi de la semaine</label>
-              <input type="date" id="chef-lundi" style="width:160px">
+              <input type="date" id="chef-lundi" style="width:160px" onchange="onChefLundiChange()">
             </div>
             <button class="btn btn-primary" onclick="generateChef()">Générer</button>
             <button class="btn btn-secondary" onclick="resetChef()">✕ Vider</button>
@@ -620,7 +620,12 @@
                 <tr>
                   <th>Nom<br><input type="text" class="hist-filter" id="rf-nom" placeholder="Filtre…" oninput="filterResidents()"></th>
                   <th>Prénom(s)<br><input type="text" class="hist-filter" id="rf-prenom" placeholder="Filtre…" oninput="filterResidents()"></th>
-                  <th>Civ.<br><input type="text" class="hist-filter" id="rf-civilite" placeholder="…" oninput="filterResidents()" style="width:40px"></th>
+                  <th>Civ.<br><select class="hist-filter" id="rf-civilite" onchange="filterResidents()" style="width:70px;padding:2px">
+                    <option value="">—</option>
+                    <option value="M.">M.</option>
+                    <option value="Mme">Mme</option>
+                    <option value="M. &amp; Mme">M. &amp; Mme</option>
+                  </select></th>
                   <th>Appt<br><input type="text" class="hist-filter" id="rf-appt" placeholder="…" oninput="filterResidents()" style="width:44px"></th>
                   <th>Cat.<br><input type="text" class="hist-filter" id="rf-cat" placeholder="…" oninput="filterResidents()" style="width:36px"></th>
                   <th>Nb rés.</th>
@@ -835,7 +840,7 @@
       <div class="form-group"><label>Codification SEPA</label><input type="text" id="res-sepa" maxlength="20"></div>
       <div class="form-group"><label>Téléphone</label><input type="tel" id="res-tel" maxlength="14" placeholder="06 12 34 56 78" oninput="formatTelFrance(this)"></div>
       <div class="form-group"><label>Contact d'urgence</label><input type="text" id="res-contact-urgence" maxlength="50" placeholder="Nom du contact"></div>
-      <div class="form-group"><label>Tél. contact d'urgence</label><input type="tel" id="res-tel-urgence" maxlength="20" placeholder="+33 (6) 63 73 70 67"></div>
+      <div class="form-group"><label>Tél. contact d'urgence</label><input type="tel" id="res-tel-urgence" maxlength="24" placeholder="+33 (6) 63 73 70 67" oninput="formatTelUrgence(this)"></div>
     </div>
     <div id="res-nr-info" style="display:none;margin-bottom:12px" class="info-box">
       <strong>Non Résident (NR)</strong> — Seuls Nom et Prénom sont obligatoires pour ce type de fiche.
@@ -1294,6 +1299,22 @@ function formatTelFrance(el) {
   el.value = formatted;
 }
 
+function formatTelUrgence(el) {
+  // Détecte un numéro français saisi en local (0X XX XX XX XX ou 0XXXXXXXXX)
+  // et le reformate automatiquement en +33 (X) XX XX XX XX
+  let val = el.value;
+  // Ne pas reformater si l'utilisateur a déjà saisi un + (autre pays)
+  if (val.trim().startsWith('+')) return;
+  const digits = val.replace(/\D/g,'');
+  // Numéro français local : 10 chiffres commençant par 0
+  if (digits.length === 10 && digits.startsWith('0')) {
+    const indicatif = digits[1];      // ex: 6, 7, 1...
+    const reste = digits.slice(2);    // 8 chiffres restants
+    const resteFmt = reste.replace(/(\d{2})(?=\d)/g, '$1 ').trim();
+    el.value = `+33 (${indicatif}) ${resteFmt}`;
+  }
+}
+
 function isReadOnly() {
   return currentUser && currentUser.role === 'lecteur';
 }
@@ -1415,7 +1436,8 @@ function openResidentModal(id=null) {
   document.getElementById('modal-resident-title').textContent = id ? 'Modifier le résident' : 'Nouveau résident';
   const fields = ['nom','prenom','civilite','appt','appt-plan','meuble','surface','surface-carrez',
     'categorie','nb','revenu','pls-plafond','pls-elig','bailleur','loyer','charges',
-    'depot','hon-edl','hon-loc','entree','sortie','bail','sepa'];
+    'depot','hon-edl','hon-loc','entree','sortie','naissance','bail','sepa',
+    'tel','contact-urgence','tel-urgence'];
   fields.forEach(f => { const el = document.getElementById('res-'+f); if(el) el.value=''; });
   document.getElementById('res-id').value = id || '';
 
@@ -2167,8 +2189,8 @@ async function loadHistorique() {
 
     renderHistorique();
 
-    // Attach filter listeners (once)
-    document.querySelectorAll('.hist-filter').forEach(inp => {
+    // Attach filter listeners (scoped to the Historique page only)
+    document.querySelectorAll('#page-historique .hist-filter').forEach(inp => {
       inp.oninput = renderHistorique;
     });
 
@@ -2179,7 +2201,7 @@ async function loadHistorique() {
 
 function renderHistorique() {
   const NCOLS = 17;
-  const filters = Array.from(document.querySelectorAll('.hist-filter')).map(i => i.value.trim().toLowerCase());
+  const filters = Array.from(document.querySelectorAll('#page-historique .hist-filter')).map(i => i.value.trim().toLowerCase());
 
   const filtered = histAllRows.filter(row => {
     return filters.every((f, i) => {
@@ -2414,6 +2436,7 @@ function resetChef() {
   if (chefOut) chefOut.innerHTML = '';
   const chefInfos = document.getElementById('chef-infos-inputs');
   if (chefInfos) chefInfos.remove();
+  chefLastLundi = null;
 }
 
 function initChef() {
@@ -2422,6 +2445,18 @@ function initChef() {
     el.value = fmtDateISO(getMondayOf(new Date()));
   }
   resetChef();
+}
+
+function onChefLundiChange() {
+  const el = document.getElementById('chef-lundi');
+  if (!el.value) return;
+  const chosen = new Date(el.value + 'T00:00:00');
+  const monday = getMondayOf(chosen);
+  const mondayStr = fmtDateISO(monday);
+  if (mondayStr !== el.value) {
+    el.value = mondayStr;
+    toast('La date a été ajustée au lundi de la semaine (' + mondayStr.split('-').reverse().join('/') + ')', 'info');
+  }
 }
 
 async function generateChef() {
@@ -2571,10 +2606,12 @@ async function generateChef() {
 
     document.getElementById('chef-output').innerHTML = html;
 
-    // Sauvegarder d'abord les valeurs existantes (session en cours)
+    // Sauvegarder d'abord les valeurs existantes — UNIQUEMENT si on régénère la MÊME semaine
+    // (sinon les saisies de la semaine précédente ne doivent pas "fuiter" vers la nouvelle)
     const savedVals = {};
     const oldDiv0 = document.getElementById('chef-infos-inputs');
-    if (oldDiv0) {
+    const memeSemaine = (chefLastLundi === lundi);
+    if (oldDiv0 && memeSemaine) {
       oldDiv0.querySelectorAll('input[type=text]').forEach(i => { savedVals[i.id] = i.value; });
       oldDiv0.querySelectorAll('input[type=checkbox]').forEach(i => { savedVals[i.id] = i.checked; });
     } else {
@@ -2651,6 +2688,7 @@ async function generateChef() {
       <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#2C3E50">Informations complémentaires — Saisie</div>
       <table style="width:100%;border-collapse:collapse;font-size:12px">${rowsHtml}</table>`;
     document.getElementById('chef-output').after(infosDiv);
+    chefLastLundi = lundi;
     // Restaurer les checkboxes
     ['fruits','laitages'].forEach(k => {
       const non = document.getElementById('chef-cb-'+k+'-non');
@@ -2811,7 +2849,7 @@ async function exportCSV() {
       return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     };
 
-    const rows = [headers.join(';')];
+    const rows = ['Historique des consommations', headers.join(';')];
     for (const r of data) {
       const res = resMap[r.resident_id] || {};
       const d = new Date(r.date);
@@ -3282,6 +3320,7 @@ const REGU_COLS = [
   { key:'observations',   label:'Observations', type:'text' },
 ];
 
+let chefLastLundi = null;  // mémorise le lundi de la dernière génération Feuille Chef
 let reguData = {};       // { residentId: { existing: {...}|null, inputs: {...} } }
 let reguDateStr = '';
 let reguModified = new Set();  // resident_ids modifiés
@@ -4531,6 +4570,22 @@ function formatTelFrance(el) {
   el.value = formatted;
 }
 
+function formatTelUrgence(el) {
+  // Détecte un numéro français saisi en local (0X XX XX XX XX ou 0XXXXXXXXX)
+  // et le reformate automatiquement en +33 (X) XX XX XX XX
+  let val = el.value;
+  // Ne pas reformater si l'utilisateur a déjà saisi un + (autre pays)
+  if (val.trim().startsWith('+')) return;
+  const digits = val.replace(/\D/g,'');
+  // Numéro français local : 10 chiffres commençant par 0
+  if (digits.length === 10 && digits.startsWith('0')) {
+    const indicatif = digits[1];      // ex: 6, 7, 1...
+    const reste = digits.slice(2);    // 8 chiffres restants
+    const resteFmt = reste.replace(/(\d{2})(?=\d)/g, '$1 ').trim();
+    el.value = `+33 (${indicatif}) ${resteFmt}`;
+  }
+}
+
 function isReadOnly() {
   return currentUser && currentUser.role === 'lecteur';
 }
@@ -4652,7 +4707,8 @@ function openResidentModal(id=null) {
   document.getElementById('modal-resident-title').textContent = id ? 'Modifier le résident' : 'Nouveau résident';
   const fields = ['nom','prenom','civilite','appt','appt-plan','meuble','surface','surface-carrez',
     'categorie','nb','revenu','pls-plafond','pls-elig','bailleur','loyer','charges',
-    'depot','hon-edl','hon-loc','entree','sortie','bail','sepa'];
+    'depot','hon-edl','hon-loc','entree','sortie','naissance','bail','sepa',
+    'tel','contact-urgence','tel-urgence'];
   fields.forEach(f => { const el = document.getElementById('res-'+f); if(el) el.value=''; });
   document.getElementById('res-id').value = id || '';
 
@@ -5404,8 +5460,8 @@ async function loadHistorique() {
 
     renderHistorique();
 
-    // Attach filter listeners (once)
-    document.querySelectorAll('.hist-filter').forEach(inp => {
+    // Attach filter listeners (scoped to the Historique page only)
+    document.querySelectorAll('#page-historique .hist-filter').forEach(inp => {
       inp.oninput = renderHistorique;
     });
 
@@ -5416,7 +5472,7 @@ async function loadHistorique() {
 
 function renderHistorique() {
   const NCOLS = 17;
-  const filters = Array.from(document.querySelectorAll('.hist-filter')).map(i => i.value.trim().toLowerCase());
+  const filters = Array.from(document.querySelectorAll('#page-historique .hist-filter')).map(i => i.value.trim().toLowerCase());
 
   const filtered = histAllRows.filter(row => {
     return filters.every((f, i) => {
@@ -5651,6 +5707,7 @@ function resetChef() {
   if (chefOut) chefOut.innerHTML = '';
   const chefInfos = document.getElementById('chef-infos-inputs');
   if (chefInfos) chefInfos.remove();
+  chefLastLundi = null;
 }
 
 function initChef() {
@@ -5659,6 +5716,18 @@ function initChef() {
     el.value = fmtDateISO(getMondayOf(new Date()));
   }
   resetChef();
+}
+
+function onChefLundiChange() {
+  const el = document.getElementById('chef-lundi');
+  if (!el.value) return;
+  const chosen = new Date(el.value + 'T00:00:00');
+  const monday = getMondayOf(chosen);
+  const mondayStr = fmtDateISO(monday);
+  if (mondayStr !== el.value) {
+    el.value = mondayStr;
+    toast('La date a été ajustée au lundi de la semaine (' + mondayStr.split('-').reverse().join('/') + ')', 'info');
+  }
 }
 
 async function generateChef() {
@@ -5808,10 +5877,12 @@ async function generateChef() {
 
     document.getElementById('chef-output').innerHTML = html;
 
-    // Sauvegarder d'abord les valeurs existantes (session en cours)
+    // Sauvegarder d'abord les valeurs existantes — UNIQUEMENT si on régénère la MÊME semaine
+    // (sinon les saisies de la semaine précédente ne doivent pas "fuiter" vers la nouvelle)
     const savedVals = {};
     const oldDiv0 = document.getElementById('chef-infos-inputs');
-    if (oldDiv0) {
+    const memeSemaine = (chefLastLundi === lundi);
+    if (oldDiv0 && memeSemaine) {
       oldDiv0.querySelectorAll('input[type=text]').forEach(i => { savedVals[i.id] = i.value; });
       oldDiv0.querySelectorAll('input[type=checkbox]').forEach(i => { savedVals[i.id] = i.checked; });
     } else {
@@ -5888,6 +5959,7 @@ async function generateChef() {
       <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#2C3E50">Informations complémentaires — Saisie</div>
       <table style="width:100%;border-collapse:collapse;font-size:12px">${rowsHtml}</table>`;
     document.getElementById('chef-output').after(infosDiv);
+    chefLastLundi = lundi;
     // Restaurer les checkboxes
     ['fruits','laitages'].forEach(k => {
       const non = document.getElementById('chef-cb-'+k+'-non');
@@ -6048,7 +6120,7 @@ async function exportCSV() {
       return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     };
 
-    const rows = [headers.join(';')];
+    const rows = ['Historique des consommations', headers.join(';')];
     for (const r of data) {
       const res = resMap[r.resident_id] || {};
       const d = new Date(r.date);
@@ -6519,6 +6591,7 @@ const REGU_COLS = [
   { key:'observations',   label:'Observations', type:'text' },
 ];
 
+let chefLastLundi = null;  // mémorise le lundi de la dernière génération Feuille Chef
 let reguData = {};       // { residentId: { existing: {...}|null, inputs: {...} } }
 let reguDateStr = '';
 let reguModified = new Set();  // resident_ids modifiés
@@ -7768,6 +7841,22 @@ function formatTelFrance(el) {
   el.value = formatted;
 }
 
+function formatTelUrgence(el) {
+  // Détecte un numéro français saisi en local (0X XX XX XX XX ou 0XXXXXXXXX)
+  // et le reformate automatiquement en +33 (X) XX XX XX XX
+  let val = el.value;
+  // Ne pas reformater si l'utilisateur a déjà saisi un + (autre pays)
+  if (val.trim().startsWith('+')) return;
+  const digits = val.replace(/\D/g,'');
+  // Numéro français local : 10 chiffres commençant par 0
+  if (digits.length === 10 && digits.startsWith('0')) {
+    const indicatif = digits[1];      // ex: 6, 7, 1...
+    const reste = digits.slice(2);    // 8 chiffres restants
+    const resteFmt = reste.replace(/(\d{2})(?=\d)/g, '$1 ').trim();
+    el.value = `+33 (${indicatif}) ${resteFmt}`;
+  }
+}
+
 function isReadOnly() {
   return currentUser && currentUser.role === 'lecteur';
 }
@@ -7889,7 +7978,8 @@ function openResidentModal(id=null) {
   document.getElementById('modal-resident-title').textContent = id ? 'Modifier le résident' : 'Nouveau résident';
   const fields = ['nom','prenom','civilite','appt','appt-plan','meuble','surface','surface-carrez',
     'categorie','nb','revenu','pls-plafond','pls-elig','bailleur','loyer','charges',
-    'depot','hon-edl','hon-loc','entree','sortie','bail','sepa'];
+    'depot','hon-edl','hon-loc','entree','sortie','naissance','bail','sepa',
+    'tel','contact-urgence','tel-urgence'];
   fields.forEach(f => { const el = document.getElementById('res-'+f); if(el) el.value=''; });
   document.getElementById('res-id').value = id || '';
 
@@ -8641,8 +8731,8 @@ async function loadHistorique() {
 
     renderHistorique();
 
-    // Attach filter listeners (once)
-    document.querySelectorAll('.hist-filter').forEach(inp => {
+    // Attach filter listeners (scoped to the Historique page only)
+    document.querySelectorAll('#page-historique .hist-filter').forEach(inp => {
       inp.oninput = renderHistorique;
     });
 
@@ -8653,7 +8743,7 @@ async function loadHistorique() {
 
 function renderHistorique() {
   const NCOLS = 17;
-  const filters = Array.from(document.querySelectorAll('.hist-filter')).map(i => i.value.trim().toLowerCase());
+  const filters = Array.from(document.querySelectorAll('#page-historique .hist-filter')).map(i => i.value.trim().toLowerCase());
 
   const filtered = histAllRows.filter(row => {
     return filters.every((f, i) => {
@@ -8888,6 +8978,7 @@ function resetChef() {
   if (chefOut) chefOut.innerHTML = '';
   const chefInfos = document.getElementById('chef-infos-inputs');
   if (chefInfos) chefInfos.remove();
+  chefLastLundi = null;
 }
 
 function initChef() {
@@ -8896,6 +8987,18 @@ function initChef() {
     el.value = fmtDateISO(getMondayOf(new Date()));
   }
   resetChef();
+}
+
+function onChefLundiChange() {
+  const el = document.getElementById('chef-lundi');
+  if (!el.value) return;
+  const chosen = new Date(el.value + 'T00:00:00');
+  const monday = getMondayOf(chosen);
+  const mondayStr = fmtDateISO(monday);
+  if (mondayStr !== el.value) {
+    el.value = mondayStr;
+    toast('La date a été ajustée au lundi de la semaine (' + mondayStr.split('-').reverse().join('/') + ')', 'info');
+  }
 }
 
 async function generateChef() {
@@ -9045,10 +9148,12 @@ async function generateChef() {
 
     document.getElementById('chef-output').innerHTML = html;
 
-    // Sauvegarder d'abord les valeurs existantes (session en cours)
+    // Sauvegarder d'abord les valeurs existantes — UNIQUEMENT si on régénère la MÊME semaine
+    // (sinon les saisies de la semaine précédente ne doivent pas "fuiter" vers la nouvelle)
     const savedVals = {};
     const oldDiv0 = document.getElementById('chef-infos-inputs');
-    if (oldDiv0) {
+    const memeSemaine = (chefLastLundi === lundi);
+    if (oldDiv0 && memeSemaine) {
       oldDiv0.querySelectorAll('input[type=text]').forEach(i => { savedVals[i.id] = i.value; });
       oldDiv0.querySelectorAll('input[type=checkbox]').forEach(i => { savedVals[i.id] = i.checked; });
     } else {
@@ -9125,6 +9230,7 @@ async function generateChef() {
       <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#2C3E50">Informations complémentaires — Saisie</div>
       <table style="width:100%;border-collapse:collapse;font-size:12px">${rowsHtml}</table>`;
     document.getElementById('chef-output').after(infosDiv);
+    chefLastLundi = lundi;
     // Restaurer les checkboxes
     ['fruits','laitages'].forEach(k => {
       const non = document.getElementById('chef-cb-'+k+'-non');
@@ -9285,7 +9391,7 @@ async function exportCSV() {
       return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     };
 
-    const rows = [headers.join(';')];
+    const rows = ['Historique des consommations', headers.join(';')];
     for (const r of data) {
       const res = resMap[r.resident_id] || {};
       const d = new Date(r.date);
@@ -9756,6 +9862,7 @@ const REGU_COLS = [
   { key:'observations',   label:'Observations', type:'text' },
 ];
 
+let chefLastLundi = null;  // mémorise le lundi de la dernière génération Feuille Chef
 let reguData = {};       // { residentId: { existing: {...}|null, inputs: {...} } }
 let reguDateStr = '';
 let reguModified = new Set();  // resident_ids modifiés
@@ -11005,6 +11112,22 @@ function formatTelFrance(el) {
   el.value = formatted;
 }
 
+function formatTelUrgence(el) {
+  // Détecte un numéro français saisi en local (0X XX XX XX XX ou 0XXXXXXXXX)
+  // et le reformate automatiquement en +33 (X) XX XX XX XX
+  let val = el.value;
+  // Ne pas reformater si l'utilisateur a déjà saisi un + (autre pays)
+  if (val.trim().startsWith('+')) return;
+  const digits = val.replace(/\D/g,'');
+  // Numéro français local : 10 chiffres commençant par 0
+  if (digits.length === 10 && digits.startsWith('0')) {
+    const indicatif = digits[1];      // ex: 6, 7, 1...
+    const reste = digits.slice(2);    // 8 chiffres restants
+    const resteFmt = reste.replace(/(\d{2})(?=\d)/g, '$1 ').trim();
+    el.value = `+33 (${indicatif}) ${resteFmt}`;
+  }
+}
+
 function isReadOnly() {
   return currentUser && currentUser.role === 'lecteur';
 }
@@ -11126,7 +11249,8 @@ function openResidentModal(id=null) {
   document.getElementById('modal-resident-title').textContent = id ? 'Modifier le résident' : 'Nouveau résident';
   const fields = ['nom','prenom','civilite','appt','appt-plan','meuble','surface','surface-carrez',
     'categorie','nb','revenu','pls-plafond','pls-elig','bailleur','loyer','charges',
-    'depot','hon-edl','hon-loc','entree','sortie','bail','sepa'];
+    'depot','hon-edl','hon-loc','entree','sortie','naissance','bail','sepa',
+    'tel','contact-urgence','tel-urgence'];
   fields.forEach(f => { const el = document.getElementById('res-'+f); if(el) el.value=''; });
   document.getElementById('res-id').value = id || '';
 
@@ -11878,8 +12002,8 @@ async function loadHistorique() {
 
     renderHistorique();
 
-    // Attach filter listeners (once)
-    document.querySelectorAll('.hist-filter').forEach(inp => {
+    // Attach filter listeners (scoped to the Historique page only)
+    document.querySelectorAll('#page-historique .hist-filter').forEach(inp => {
       inp.oninput = renderHistorique;
     });
 
@@ -11890,7 +12014,7 @@ async function loadHistorique() {
 
 function renderHistorique() {
   const NCOLS = 17;
-  const filters = Array.from(document.querySelectorAll('.hist-filter')).map(i => i.value.trim().toLowerCase());
+  const filters = Array.from(document.querySelectorAll('#page-historique .hist-filter')).map(i => i.value.trim().toLowerCase());
 
   const filtered = histAllRows.filter(row => {
     return filters.every((f, i) => {
@@ -12125,6 +12249,7 @@ function resetChef() {
   if (chefOut) chefOut.innerHTML = '';
   const chefInfos = document.getElementById('chef-infos-inputs');
   if (chefInfos) chefInfos.remove();
+  chefLastLundi = null;
 }
 
 function initChef() {
@@ -12133,6 +12258,18 @@ function initChef() {
     el.value = fmtDateISO(getMondayOf(new Date()));
   }
   resetChef();
+}
+
+function onChefLundiChange() {
+  const el = document.getElementById('chef-lundi');
+  if (!el.value) return;
+  const chosen = new Date(el.value + 'T00:00:00');
+  const monday = getMondayOf(chosen);
+  const mondayStr = fmtDateISO(monday);
+  if (mondayStr !== el.value) {
+    el.value = mondayStr;
+    toast('La date a été ajustée au lundi de la semaine (' + mondayStr.split('-').reverse().join('/') + ')', 'info');
+  }
 }
 
 async function generateChef() {
@@ -12282,10 +12419,12 @@ async function generateChef() {
 
     document.getElementById('chef-output').innerHTML = html;
 
-    // Sauvegarder d'abord les valeurs existantes (session en cours)
+    // Sauvegarder d'abord les valeurs existantes — UNIQUEMENT si on régénère la MÊME semaine
+    // (sinon les saisies de la semaine précédente ne doivent pas "fuiter" vers la nouvelle)
     const savedVals = {};
     const oldDiv0 = document.getElementById('chef-infos-inputs');
-    if (oldDiv0) {
+    const memeSemaine = (chefLastLundi === lundi);
+    if (oldDiv0 && memeSemaine) {
       oldDiv0.querySelectorAll('input[type=text]').forEach(i => { savedVals[i.id] = i.value; });
       oldDiv0.querySelectorAll('input[type=checkbox]').forEach(i => { savedVals[i.id] = i.checked; });
     } else {
@@ -12362,6 +12501,7 @@ async function generateChef() {
       <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#2C3E50">Informations complémentaires — Saisie</div>
       <table style="width:100%;border-collapse:collapse;font-size:12px">${rowsHtml}</table>`;
     document.getElementById('chef-output').after(infosDiv);
+    chefLastLundi = lundi;
     // Restaurer les checkboxes
     ['fruits','laitages'].forEach(k => {
       const non = document.getElementById('chef-cb-'+k+'-non');
@@ -12522,7 +12662,7 @@ async function exportCSV() {
       return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     };
 
-    const rows = [headers.join(';')];
+    const rows = ['Historique des consommations', headers.join(';')];
     for (const r of data) {
       const res = resMap[r.resident_id] || {};
       const d = new Date(r.date);
@@ -12993,6 +13133,7 @@ const REGU_COLS = [
   { key:'observations',   label:'Observations', type:'text' },
 ];
 
+let chefLastLundi = null;  // mémorise le lundi de la dernière génération Feuille Chef
 let reguData = {};       // { residentId: { existing: {...}|null, inputs: {...} } }
 let reguDateStr = '';
 let reguModified = new Set();  // resident_ids modifiés
