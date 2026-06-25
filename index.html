@@ -567,11 +567,11 @@
           <div class="btn-group">
             <div class="form-group">
               <label>Année</label>
-              <input type="number" id="chef-annee" style="width:90px" min="2024" max="2035" onchange="onChefSemaineChange()">
+              <input type="number" id="chef-annee" style="width:90px" min="2024" max="2035" onchange="onChefAnneeChange()">
             </div>
             <div class="form-group">
-              <label>Semaine ISO</label>
-              <input type="number" id="chef-semaine-iso" style="width:80px" min="1" max="53" onchange="onChefSemaineChange()">
+              <label>Semaine</label>
+              <select id="chef-semaine-iso" style="width:230px" onchange="onChefSemaineChange()"></select>
             </div>
             <input type="hidden" id="chef-lundi">
             <button class="btn btn-primary" onclick="generateChef()">Générer</button>
@@ -2476,11 +2476,21 @@ function resetChef() {
 
 function initChef() {
   const today = new Date();
-  if (!document.getElementById('chef-annee').value) {
-    document.getElementById('chef-annee').value = today.getFullYear();
+  const semaineActuelle = getISOWeek(today);
+  let semainePrecedente = semaineActuelle - 1;
+  let anneeAffichee = today.getFullYear();
+  if (semainePrecedente < 1) {
+    // Semaine 1 de l'année -> bascule sur la dernière semaine de l'année précédente
+    anneeAffichee = today.getFullYear() - 1;
+    semainePrecedente = getNbSemainesISO(anneeAffichee);
   }
+
+  if (!document.getElementById('chef-annee').value) {
+    document.getElementById('chef-annee').value = anneeAffichee;
+  }
+  populateChefSemaines(parseInt(document.getElementById('chef-semaine-iso').value) || semainePrecedente);
   if (!document.getElementById('chef-semaine-iso').value) {
-    document.getElementById('chef-semaine-iso').value = getISOWeek(today);
+    document.getElementById('chef-semaine-iso').value = semainePrecedente;
   }
   onChefSemaineChange();
   resetChef();
@@ -2499,12 +2509,45 @@ function calcLundiFromISO(annee, semaine) {
   return mondaySem;
 }
 
+function getNbSemainesISO(annee) {
+  // Dernière semaine ISO de l'année : 52 ou 53 selon le calendrier
+  const d = new Date(annee, 11, 31);
+  let w = getISOWeek(d);
+  if (w === 1) w = getISOWeek(new Date(annee, 11, 24)); // 31/12 parfois en S1 de l'année suivante
+  return w;
+}
+
+function populateChefSemaines(selectedSemaine) {
+  const annee = parseInt(document.getElementById('chef-annee').value);
+  const sel = document.getElementById('chef-semaine-iso');
+  if (!annee) { sel.innerHTML = ''; return; }
+  const nbSemaines = getNbSemainesISO(annee);
+  const MOIS_COURT = ['jan.','fév.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+
+  let html = '';
+  for (let s = 1; s <= nbSemaines; s++) {
+    const lundi = calcLundiFromISO(annee, s);
+    const dimanche = addDays(lundi, 6);
+    const lLabel = `${String(lundi.getDate()).padStart(2,'0')} ${MOIS_COURT[lundi.getMonth()]}`;
+    const dLabel = `${String(dimanche.getDate()).padStart(2,'0')} ${MOIS_COURT[dimanche.getMonth()]}`;
+    const selected = (s === selectedSemaine) ? 'selected' : '';
+    html += `<option value="${s}" ${selected}>S${s} (${lLabel} → ${dLabel})</option>`;
+  }
+  sel.innerHTML = html;
+}
+
 function onChefSemaineChange() {
   const annee = parseInt(document.getElementById('chef-annee').value);
   const semaine = parseInt(document.getElementById('chef-semaine-iso').value);
   if (!annee || !semaine) { document.getElementById('chef-lundi').value = ''; return; }
   const lundi = calcLundiFromISO(annee, semaine);
   document.getElementById('chef-lundi').value = fmtDateISO(lundi);
+}
+
+function onChefAnneeChange() {
+  const semaineActuelle = parseInt(document.getElementById('chef-semaine-iso').value) || 1;
+  populateChefSemaines(semaineActuelle);
+  onChefSemaineChange();
 }
 
 async function loadChefSavedList() {
@@ -2537,7 +2580,7 @@ async function loadChefSavedList() {
 function reprendreChefFeuille(lundiStr) {
   const d = new Date(lundiStr + 'T00:00:00');
   document.getElementById('chef-annee').value = d.getFullYear();
-  document.getElementById('chef-semaine-iso').value = getISOWeek(d);
+  populateChefSemaines(getISOWeek(d));
   document.getElementById('chef-lundi').value = lundiStr;
   generateChef();
   // Scroll vers le haut pour voir la feuille générée
@@ -5798,11 +5841,21 @@ function resetChef() {
 
 function initChef() {
   const today = new Date();
-  if (!document.getElementById('chef-annee').value) {
-    document.getElementById('chef-annee').value = today.getFullYear();
+  const semaineActuelle = getISOWeek(today);
+  let semainePrecedente = semaineActuelle - 1;
+  let anneeAffichee = today.getFullYear();
+  if (semainePrecedente < 1) {
+    // Semaine 1 de l'année -> bascule sur la dernière semaine de l'année précédente
+    anneeAffichee = today.getFullYear() - 1;
+    semainePrecedente = getNbSemainesISO(anneeAffichee);
   }
+
+  if (!document.getElementById('chef-annee').value) {
+    document.getElementById('chef-annee').value = anneeAffichee;
+  }
+  populateChefSemaines(parseInt(document.getElementById('chef-semaine-iso').value) || semainePrecedente);
   if (!document.getElementById('chef-semaine-iso').value) {
-    document.getElementById('chef-semaine-iso').value = getISOWeek(today);
+    document.getElementById('chef-semaine-iso').value = semainePrecedente;
   }
   onChefSemaineChange();
   resetChef();
@@ -5821,12 +5874,45 @@ function calcLundiFromISO(annee, semaine) {
   return mondaySem;
 }
 
+function getNbSemainesISO(annee) {
+  // Dernière semaine ISO de l'année : 52 ou 53 selon le calendrier
+  const d = new Date(annee, 11, 31);
+  let w = getISOWeek(d);
+  if (w === 1) w = getISOWeek(new Date(annee, 11, 24)); // 31/12 parfois en S1 de l'année suivante
+  return w;
+}
+
+function populateChefSemaines(selectedSemaine) {
+  const annee = parseInt(document.getElementById('chef-annee').value);
+  const sel = document.getElementById('chef-semaine-iso');
+  if (!annee) { sel.innerHTML = ''; return; }
+  const nbSemaines = getNbSemainesISO(annee);
+  const MOIS_COURT = ['jan.','fév.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+
+  let html = '';
+  for (let s = 1; s <= nbSemaines; s++) {
+    const lundi = calcLundiFromISO(annee, s);
+    const dimanche = addDays(lundi, 6);
+    const lLabel = `${String(lundi.getDate()).padStart(2,'0')} ${MOIS_COURT[lundi.getMonth()]}`;
+    const dLabel = `${String(dimanche.getDate()).padStart(2,'0')} ${MOIS_COURT[dimanche.getMonth()]}`;
+    const selected = (s === selectedSemaine) ? 'selected' : '';
+    html += `<option value="${s}" ${selected}>S${s} (${lLabel} → ${dLabel})</option>`;
+  }
+  sel.innerHTML = html;
+}
+
 function onChefSemaineChange() {
   const annee = parseInt(document.getElementById('chef-annee').value);
   const semaine = parseInt(document.getElementById('chef-semaine-iso').value);
   if (!annee || !semaine) { document.getElementById('chef-lundi').value = ''; return; }
   const lundi = calcLundiFromISO(annee, semaine);
   document.getElementById('chef-lundi').value = fmtDateISO(lundi);
+}
+
+function onChefAnneeChange() {
+  const semaineActuelle = parseInt(document.getElementById('chef-semaine-iso').value) || 1;
+  populateChefSemaines(semaineActuelle);
+  onChefSemaineChange();
 }
 
 async function loadChefSavedList() {
@@ -5859,7 +5945,7 @@ async function loadChefSavedList() {
 function reprendreChefFeuille(lundiStr) {
   const d = new Date(lundiStr + 'T00:00:00');
   document.getElementById('chef-annee').value = d.getFullYear();
-  document.getElementById('chef-semaine-iso').value = getISOWeek(d);
+  populateChefSemaines(getISOWeek(d));
   document.getElementById('chef-lundi').value = lundiStr;
   generateChef();
   document.getElementById('chef-output').scrollIntoView({behavior:'smooth', block:'start'});
@@ -9119,11 +9205,21 @@ function resetChef() {
 
 function initChef() {
   const today = new Date();
-  if (!document.getElementById('chef-annee').value) {
-    document.getElementById('chef-annee').value = today.getFullYear();
+  const semaineActuelle = getISOWeek(today);
+  let semainePrecedente = semaineActuelle - 1;
+  let anneeAffichee = today.getFullYear();
+  if (semainePrecedente < 1) {
+    // Semaine 1 de l'année -> bascule sur la dernière semaine de l'année précédente
+    anneeAffichee = today.getFullYear() - 1;
+    semainePrecedente = getNbSemainesISO(anneeAffichee);
   }
+
+  if (!document.getElementById('chef-annee').value) {
+    document.getElementById('chef-annee').value = anneeAffichee;
+  }
+  populateChefSemaines(parseInt(document.getElementById('chef-semaine-iso').value) || semainePrecedente);
   if (!document.getElementById('chef-semaine-iso').value) {
-    document.getElementById('chef-semaine-iso').value = getISOWeek(today);
+    document.getElementById('chef-semaine-iso').value = semainePrecedente;
   }
   onChefSemaineChange();
   resetChef();
@@ -9142,12 +9238,45 @@ function calcLundiFromISO(annee, semaine) {
   return mondaySem;
 }
 
+function getNbSemainesISO(annee) {
+  // Dernière semaine ISO de l'année : 52 ou 53 selon le calendrier
+  const d = new Date(annee, 11, 31);
+  let w = getISOWeek(d);
+  if (w === 1) w = getISOWeek(new Date(annee, 11, 24)); // 31/12 parfois en S1 de l'année suivante
+  return w;
+}
+
+function populateChefSemaines(selectedSemaine) {
+  const annee = parseInt(document.getElementById('chef-annee').value);
+  const sel = document.getElementById('chef-semaine-iso');
+  if (!annee) { sel.innerHTML = ''; return; }
+  const nbSemaines = getNbSemainesISO(annee);
+  const MOIS_COURT = ['jan.','fév.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+
+  let html = '';
+  for (let s = 1; s <= nbSemaines; s++) {
+    const lundi = calcLundiFromISO(annee, s);
+    const dimanche = addDays(lundi, 6);
+    const lLabel = `${String(lundi.getDate()).padStart(2,'0')} ${MOIS_COURT[lundi.getMonth()]}`;
+    const dLabel = `${String(dimanche.getDate()).padStart(2,'0')} ${MOIS_COURT[dimanche.getMonth()]}`;
+    const selected = (s === selectedSemaine) ? 'selected' : '';
+    html += `<option value="${s}" ${selected}>S${s} (${lLabel} → ${dLabel})</option>`;
+  }
+  sel.innerHTML = html;
+}
+
 function onChefSemaineChange() {
   const annee = parseInt(document.getElementById('chef-annee').value);
   const semaine = parseInt(document.getElementById('chef-semaine-iso').value);
   if (!annee || !semaine) { document.getElementById('chef-lundi').value = ''; return; }
   const lundi = calcLundiFromISO(annee, semaine);
   document.getElementById('chef-lundi').value = fmtDateISO(lundi);
+}
+
+function onChefAnneeChange() {
+  const semaineActuelle = parseInt(document.getElementById('chef-semaine-iso').value) || 1;
+  populateChefSemaines(semaineActuelle);
+  onChefSemaineChange();
 }
 
 async function loadChefSavedList() {
@@ -9180,7 +9309,7 @@ async function loadChefSavedList() {
 function reprendreChefFeuille(lundiStr) {
   const d = new Date(lundiStr + 'T00:00:00');
   document.getElementById('chef-annee').value = d.getFullYear();
-  document.getElementById('chef-semaine-iso').value = getISOWeek(d);
+  populateChefSemaines(getISOWeek(d));
   document.getElementById('chef-lundi').value = lundiStr;
   generateChef();
   document.getElementById('chef-output').scrollIntoView({behavior:'smooth', block:'start'});
@@ -12440,11 +12569,21 @@ function resetChef() {
 
 function initChef() {
   const today = new Date();
-  if (!document.getElementById('chef-annee').value) {
-    document.getElementById('chef-annee').value = today.getFullYear();
+  const semaineActuelle = getISOWeek(today);
+  let semainePrecedente = semaineActuelle - 1;
+  let anneeAffichee = today.getFullYear();
+  if (semainePrecedente < 1) {
+    // Semaine 1 de l'année -> bascule sur la dernière semaine de l'année précédente
+    anneeAffichee = today.getFullYear() - 1;
+    semainePrecedente = getNbSemainesISO(anneeAffichee);
   }
+
+  if (!document.getElementById('chef-annee').value) {
+    document.getElementById('chef-annee').value = anneeAffichee;
+  }
+  populateChefSemaines(parseInt(document.getElementById('chef-semaine-iso').value) || semainePrecedente);
   if (!document.getElementById('chef-semaine-iso').value) {
-    document.getElementById('chef-semaine-iso').value = getISOWeek(today);
+    document.getElementById('chef-semaine-iso').value = semainePrecedente;
   }
   onChefSemaineChange();
   resetChef();
@@ -12463,12 +12602,45 @@ function calcLundiFromISO(annee, semaine) {
   return mondaySem;
 }
 
+function getNbSemainesISO(annee) {
+  // Dernière semaine ISO de l'année : 52 ou 53 selon le calendrier
+  const d = new Date(annee, 11, 31);
+  let w = getISOWeek(d);
+  if (w === 1) w = getISOWeek(new Date(annee, 11, 24)); // 31/12 parfois en S1 de l'année suivante
+  return w;
+}
+
+function populateChefSemaines(selectedSemaine) {
+  const annee = parseInt(document.getElementById('chef-annee').value);
+  const sel = document.getElementById('chef-semaine-iso');
+  if (!annee) { sel.innerHTML = ''; return; }
+  const nbSemaines = getNbSemainesISO(annee);
+  const MOIS_COURT = ['jan.','fév.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+
+  let html = '';
+  for (let s = 1; s <= nbSemaines; s++) {
+    const lundi = calcLundiFromISO(annee, s);
+    const dimanche = addDays(lundi, 6);
+    const lLabel = `${String(lundi.getDate()).padStart(2,'0')} ${MOIS_COURT[lundi.getMonth()]}`;
+    const dLabel = `${String(dimanche.getDate()).padStart(2,'0')} ${MOIS_COURT[dimanche.getMonth()]}`;
+    const selected = (s === selectedSemaine) ? 'selected' : '';
+    html += `<option value="${s}" ${selected}>S${s} (${lLabel} → ${dLabel})</option>`;
+  }
+  sel.innerHTML = html;
+}
+
 function onChefSemaineChange() {
   const annee = parseInt(document.getElementById('chef-annee').value);
   const semaine = parseInt(document.getElementById('chef-semaine-iso').value);
   if (!annee || !semaine) { document.getElementById('chef-lundi').value = ''; return; }
   const lundi = calcLundiFromISO(annee, semaine);
   document.getElementById('chef-lundi').value = fmtDateISO(lundi);
+}
+
+function onChefAnneeChange() {
+  const semaineActuelle = parseInt(document.getElementById('chef-semaine-iso').value) || 1;
+  populateChefSemaines(semaineActuelle);
+  onChefSemaineChange();
 }
 
 async function loadChefSavedList() {
@@ -12501,7 +12673,7 @@ async function loadChefSavedList() {
 function reprendreChefFeuille(lundiStr) {
   const d = new Date(lundiStr + 'T00:00:00');
   document.getElementById('chef-annee').value = d.getFullYear();
-  document.getElementById('chef-semaine-iso').value = getISOWeek(d);
+  populateChefSemaines(getISOWeek(d));
   document.getElementById('chef-lundi').value = lundiStr;
   generateChef();
   document.getElementById('chef-output').scrollIntoView({behavior:'smooth', block:'start'});
