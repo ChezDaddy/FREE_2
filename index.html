@@ -169,7 +169,8 @@
     background: var(--gris-fonce); color: white; padding: 12px 20px;
     border-radius: var(--radius); font-size: 13px; font-weight: 500;
     box-shadow: var(--shadow-lg); transform: translateY(100px); opacity: 0;
-    transition: all .3s; max-width: 320px;
+    transition: all .3s; max-width: 480px; max-height: 200px; overflow-y: auto;
+    word-wrap: break-word; white-space: pre-wrap;
   }
   #toast.show { transform: translateY(0); opacity: 1; }
   #toast.success { background: #2e7d32; }
@@ -1293,7 +1294,9 @@ function toast(msg, type='') {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'show ' + type;
-  setTimeout(() => t.className='', 3000);
+  const duree = (type === 'error') ? 10000 : 3000;
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.className='', duree);
 }
 
 function confirm2(title, msg) {
@@ -2834,6 +2837,12 @@ async function printChef() {
   const content = document.getElementById('chef-print-content');
   if (!content) { toast('Générez d\'abord la feuille','error'); return; }
 
+  // Diagnostic visible (à retirer une fois le bug confirmé résolu)
+  console.log('[DIAG printChef] chef-lundi =', document.getElementById('chef-lundi')?.value,
+              '| chef-annee =', document.getElementById('chef-annee')?.value,
+              '| chef-semaine-iso =', document.getElementById('chef-semaine-iso')?.value,
+              '| currentMaison =', currentMaison?.id);
+
   // Lire les valeurs des inputs de saisie
   const getVal    = id => (document.getElementById(id)||{}).value || '';
   const annivAuto = getVal('chef-anniv-auto');
@@ -2843,7 +2852,9 @@ async function printChef() {
 
   // Sauvegarde en base avant impression (upsert sur maison_id + semaine)
   const chefLundiVal = document.getElementById('chef-lundi').value || '';
-  if (chefLundiVal) {
+  if (!chefLundiVal) {
+    toast('⚠️ Aucune semaine sélectionnée — la feuille n\'a pas pu être enregistrée', 'error');
+  } else {
     try {
       const chefSnapshot = {
         maison_id: currentMaison.id,
@@ -4660,7 +4671,9 @@ function toast(msg, type='') {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'show ' + type;
-  setTimeout(() => t.className='', 3000);
+  const duree = (type === 'error') ? 10000 : 3000;
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.className='', duree);
 }
 
 function confirm2(title, msg) {
@@ -6200,6 +6213,12 @@ async function printChef() {
   const content = document.getElementById('chef-print-content');
   if (!content) { toast('Générez d\'abord la feuille','error'); return; }
 
+  // Diagnostic visible (à retirer une fois le bug confirmé résolu)
+  console.log('[DIAG printChef] chef-lundi =', document.getElementById('chef-lundi')?.value,
+              '| chef-annee =', document.getElementById('chef-annee')?.value,
+              '| chef-semaine-iso =', document.getElementById('chef-semaine-iso')?.value,
+              '| currentMaison =', currentMaison?.id);
+
   // Lire les valeurs des inputs de saisie
   const getVal    = id => (document.getElementById(id)||{}).value || '';
   const annivAuto = getVal('chef-anniv-auto');
@@ -6209,7 +6228,9 @@ async function printChef() {
 
   // Sauvegarde en base avant impression (upsert sur maison_id + semaine)
   const chefLundiVal = document.getElementById('chef-lundi').value || '';
-  if (chefLundiVal) {
+  if (!chefLundiVal) {
+    toast('⚠️ Aucune semaine sélectionnée — la feuille n\'a pas pu être enregistrée', 'error');
+  } else {
     try {
       const chefSnapshot = {
         maison_id: currentMaison.id,
@@ -8026,7 +8047,9 @@ function toast(msg, type='') {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'show ' + type;
-  setTimeout(() => t.className='', 3000);
+  const duree = (type === 'error') ? 10000 : 3000;
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.className='', duree);
 }
 
 function confirm2(title, msg) {
@@ -9566,6 +9589,12 @@ async function printChef() {
   const content = document.getElementById('chef-print-content');
   if (!content) { toast('Générez d\'abord la feuille','error'); return; }
 
+  // Diagnostic visible (à retirer une fois le bug confirmé résolu)
+  console.log('[DIAG printChef] chef-lundi =', document.getElementById('chef-lundi')?.value,
+              '| chef-annee =', document.getElementById('chef-annee')?.value,
+              '| chef-semaine-iso =', document.getElementById('chef-semaine-iso')?.value,
+              '| currentMaison =', currentMaison?.id);
+
   // Lire les valeurs des inputs de saisie
   const getVal    = id => (document.getElementById(id)||{}).value || '';
   const annivAuto = getVal('chef-anniv-auto');
@@ -9575,7 +9604,9 @@ async function printChef() {
 
   // Sauvegarde en base avant impression (upsert sur maison_id + semaine)
   const chefLundiVal = document.getElementById('chef-lundi').value || '';
-  if (chefLundiVal) {
+  if (!chefLundiVal) {
+    toast('⚠️ Aucune semaine sélectionnée — la feuille n\'a pas pu être enregistrée', 'error');
+  } else {
     try {
       const chefSnapshot = {
         maison_id: currentMaison.id,
@@ -11392,7 +11423,9 @@ function toast(msg, type='') {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'show ' + type;
-  setTimeout(() => t.className='', 3000);
+  const duree = (type === 'error') ? 10000 : 3000;
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.className='', duree);
 }
 
 function confirm2(title, msg) {
@@ -12932,6 +12965,12 @@ async function printChef() {
   const content = document.getElementById('chef-print-content');
   if (!content) { toast('Générez d\'abord la feuille','error'); return; }
 
+  // Diagnostic visible (à retirer une fois le bug confirmé résolu)
+  console.log('[DIAG printChef] chef-lundi =', document.getElementById('chef-lundi')?.value,
+              '| chef-annee =', document.getElementById('chef-annee')?.value,
+              '| chef-semaine-iso =', document.getElementById('chef-semaine-iso')?.value,
+              '| currentMaison =', currentMaison?.id);
+
   // Lire les valeurs des inputs de saisie
   const getVal    = id => (document.getElementById(id)||{}).value || '';
   const annivAuto = getVal('chef-anniv-auto');
@@ -12941,7 +12980,9 @@ async function printChef() {
 
   // Sauvegarde en base avant impression (upsert sur maison_id + semaine)
   const chefLundiVal = document.getElementById('chef-lundi').value || '';
-  if (chefLundiVal) {
+  if (!chefLundiVal) {
+    toast('⚠️ Aucune semaine sélectionnée — la feuille n\'a pas pu être enregistrée', 'error');
+  } else {
     try {
       const chefSnapshot = {
         maison_id: currentMaison.id,
