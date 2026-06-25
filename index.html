@@ -293,6 +293,26 @@
   /* INFO BOX */
   .info-box { background: #e3f2fd; border-left: 4px solid #1565c0; padding: 10px 14px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: 13px; color: #1565c0; margin-bottom: 12px; }
   .warn-box { background: #fff3e0; border-left: 4px solid #e65100; padding: 10px 14px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: 13px; color: #e65100; margin-bottom: 12px; }
+
+  /* CALENDRIER SEMAINE — sélection par ligne (Feuille Chef) */
+  .week-calendar-popup {
+    position: absolute; top: 100%; left: 0; margin-top: 4px; z-index: 200;
+    background: white; border: 1px solid var(--gris-clair); border-radius: var(--radius-sm);
+    box-shadow: 0 8px 24px rgba(0,0,0,.15); padding: 14px; width: 280px;
+  }
+  .wcal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .wcal-header button { background: none; border: none; cursor: pointer; font-size: 16px; color: var(--gris-mid); padding: 4px 10px; border-radius: 4px; }
+  .wcal-header button:hover { background: var(--gris-clair); }
+  .wcal-header .wcal-month-label { font-weight: 700; font-size: 14px; text-transform: capitalize; }
+  .wcal-grid { width: 100%; border-collapse: collapse; }
+  .wcal-grid th { font-size: 10px; color: var(--gris-mid); font-weight: 600; padding: 4px 2px; text-align: center; }
+  .wcal-grid td { text-align: center; padding: 5px 2px; font-size: 12px; cursor: pointer; color: #333; border-radius: 4px; transition: background .12s; }
+  .wcal-grid td.wcal-other-month { color: #ccc; }
+  .wcal-grid tr.wcal-week-row:hover td { background: var(--rouge-light); }
+  .wcal-grid tr.wcal-week-row.wcal-selected td { background: var(--rouge); color: white; font-weight: 700; }
+  .wcal-footer { margin-top: 10px; text-align: center; }
+  .wcal-footer button { background: none; border: 1px solid var(--gris-clair); border-radius: 4px; padding: 6px 14px; font-size: 12px; cursor: pointer; color: var(--gris-mid); }
+  .wcal-footer button:hover { background: var(--gris-clair); }
 </style>
 </head>
 <body>
@@ -545,9 +565,12 @@
         </div>
         <div class="card no-print">
           <div class="btn-group">
-            <div class="form-group">
-              <label>Lundi de la semaine</label>
-              <input type="date" id="chef-lundi" style="width:160px" onchange="onChefLundiChange()">
+            <div class="form-group" style="position:relative">
+              <label>Semaine</label>
+              <input type="text" id="chef-lundi-display" readonly style="width:160px;cursor:pointer;background:white"
+                     onclick="toggleChefCalendar()" placeholder="Choisir une semaine">
+              <input type="hidden" id="chef-lundi">
+              <div id="chef-calendar-popup" class="week-calendar-popup" style="display:none"></div>
             </div>
             <button class="btn btn-primary" onclick="generateChef()">Générer</button>
             <button class="btn btn-secondary" onclick="resetChef()">✕ Vider</button>
@@ -2442,22 +2465,103 @@ function resetChef() {
 function initChef() {
   const el = document.getElementById('chef-lundi');
   if (!el.value) {
-    el.value = fmtDateISO(getMondayOf(new Date()));
+    const monday = getMondayOf(new Date());
+    el.value = fmtDateISO(monday);
+    document.getElementById('chef-lundi-display').value =
+      `${String(monday.getDate()).padStart(2,'0')}/${String(monday.getMonth()+1).padStart(2,'0')}/${monday.getFullYear()} (S${getISOWeek(monday)})`;
   }
   resetChef();
 }
 
-function onChefLundiChange() {
-  const el = document.getElementById('chef-lundi');
-  if (!el.value) return;
-  const chosen = new Date(el.value + 'T00:00:00');
-  const monday = getMondayOf(chosen);
-  const mondayStr = fmtDateISO(monday);
-  if (mondayStr !== el.value) {
-    el.value = mondayStr;
-    toast('La date a été ajustée au lundi de la semaine (' + mondayStr.split('-').reverse().join('/') + ')', 'info');
+// ========== Calendrier semaine custom — Feuille Chef ==========
+let wcalViewDate = new Date(); // mois affiché dans le calendrier
+
+function toggleChefCalendar() {
+  const popup = document.getElementById('chef-calendar-popup');
+  const isOpen = popup.style.display === 'block';
+  if (isOpen) {
+    popup.style.display = 'none';
+  } else {
+    const current = document.getElementById('chef-lundi').value;
+    wcalViewDate = current ? new Date(current + 'T00:00:00') : new Date();
+    renderWeekCalendar();
+    popup.style.display = 'block';
   }
 }
+
+function renderWeekCalendar() {
+  const popup = document.getElementById('chef-calendar-popup');
+  const year = wcalViewDate.getFullYear();
+  const month = wcalViewDate.getMonth();
+  const monthLabel = MOIS_LONG[month] + ' ' + year;
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+
+  const currentLundiVal = document.getElementById('chef-lundi').value;
+
+  let html = `
+    <div class="wcal-header">
+      <button onclick="wcalNavigate(-1)" type="button">‹</button>
+      <span class="wcal-month-label">${monthLabel}</span>
+      <button onclick="wcalNavigate(1)" type="button">›</button>
+    </div>
+    <table class="wcal-grid">
+      <thead><tr><th>lun.</th><th>mar.</th><th>mer.</th><th>jeu.</th><th>ven.</th><th>sam.</th><th>dim.</th></tr></thead>
+      <tbody>`;
+
+  let cursor = new Date(startMonday);
+  // Afficher 6 semaines pour couvrir tout le mois affiché
+  for (let w = 0; w < 6; w++) {
+    const weekMonday = new Date(cursor);
+    const weekMondayStr = fmtDateISO(weekMonday);
+    const isSelected = (weekMondayStr === currentLundiVal);
+    html += `<tr class="wcal-week-row${isSelected?' wcal-selected':''}" onclick="selectChefWeek('${weekMondayStr}')">`;
+    for (let d = 0; d < 7; d++) {
+      const day = addDays(cursor, d);
+      const otherMonth = day.getMonth() !== month;
+      html += `<td class="${otherMonth?'wcal-other-month':''}">${day.getDate()}</td>`;
+    }
+    html += `</tr>`;
+    cursor = addDays(cursor, 7);
+    // Arrêter dès que la semaine suivante commence bien après le mois affiché
+    if (cursor.getMonth() !== month && cursor > firstOfMonth && w >= 4) break;
+  }
+
+  html += `</tbody></table>
+    <div class="wcal-footer"><button type="button" onclick="clearChefWeek()">Effacer</button></div>`;
+
+  popup.innerHTML = html;
+}
+
+function wcalNavigate(delta) {
+  wcalViewDate = new Date(wcalViewDate.getFullYear(), wcalViewDate.getMonth() + delta, 1);
+  renderWeekCalendar();
+}
+
+function selectChefWeek(mondayStr) {
+  document.getElementById('chef-lundi').value = mondayStr;
+  const d = new Date(mondayStr + 'T00:00:00');
+  document.getElementById('chef-lundi-display').value =
+    `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} (S${getISOWeek(d)})`;
+  document.getElementById('chef-calendar-popup').style.display = 'none';
+}
+
+function clearChefWeek() {
+  document.getElementById('chef-lundi').value = '';
+  document.getElementById('chef-lundi-display').value = '';
+  document.getElementById('chef-calendar-popup').style.display = 'none';
+}
+
+// Fermer le calendrier si on clique en dehors
+document.addEventListener('click', function(e) {
+  const popup = document.getElementById('chef-calendar-popup');
+  const display = document.getElementById('chef-lundi-display');
+  if (!popup || !display) return;
+  if (popup.style.display === 'block' && !popup.contains(e.target) && e.target !== display) {
+    popup.style.display = 'none';
+  }
+});
 
 async function generateChef() {
   const lundi = document.getElementById('chef-lundi').value;
@@ -5713,22 +5817,103 @@ function resetChef() {
 function initChef() {
   const el = document.getElementById('chef-lundi');
   if (!el.value) {
-    el.value = fmtDateISO(getMondayOf(new Date()));
+    const monday = getMondayOf(new Date());
+    el.value = fmtDateISO(monday);
+    document.getElementById('chef-lundi-display').value =
+      `${String(monday.getDate()).padStart(2,'0')}/${String(monday.getMonth()+1).padStart(2,'0')}/${monday.getFullYear()} (S${getISOWeek(monday)})`;
   }
   resetChef();
 }
 
-function onChefLundiChange() {
-  const el = document.getElementById('chef-lundi');
-  if (!el.value) return;
-  const chosen = new Date(el.value + 'T00:00:00');
-  const monday = getMondayOf(chosen);
-  const mondayStr = fmtDateISO(monday);
-  if (mondayStr !== el.value) {
-    el.value = mondayStr;
-    toast('La date a été ajustée au lundi de la semaine (' + mondayStr.split('-').reverse().join('/') + ')', 'info');
+// ========== Calendrier semaine custom — Feuille Chef ==========
+let wcalViewDate = new Date(); // mois affiché dans le calendrier
+
+function toggleChefCalendar() {
+  const popup = document.getElementById('chef-calendar-popup');
+  const isOpen = popup.style.display === 'block';
+  if (isOpen) {
+    popup.style.display = 'none';
+  } else {
+    const current = document.getElementById('chef-lundi').value;
+    wcalViewDate = current ? new Date(current + 'T00:00:00') : new Date();
+    renderWeekCalendar();
+    popup.style.display = 'block';
   }
 }
+
+function renderWeekCalendar() {
+  const popup = document.getElementById('chef-calendar-popup');
+  const year = wcalViewDate.getFullYear();
+  const month = wcalViewDate.getMonth();
+  const monthLabel = MOIS_LONG[month] + ' ' + year;
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+
+  const currentLundiVal = document.getElementById('chef-lundi').value;
+
+  let html = `
+    <div class="wcal-header">
+      <button onclick="wcalNavigate(-1)" type="button">‹</button>
+      <span class="wcal-month-label">${monthLabel}</span>
+      <button onclick="wcalNavigate(1)" type="button">›</button>
+    </div>
+    <table class="wcal-grid">
+      <thead><tr><th>lun.</th><th>mar.</th><th>mer.</th><th>jeu.</th><th>ven.</th><th>sam.</th><th>dim.</th></tr></thead>
+      <tbody>`;
+
+  let cursor = new Date(startMonday);
+  // Afficher 6 semaines pour couvrir tout le mois affiché
+  for (let w = 0; w < 6; w++) {
+    const weekMonday = new Date(cursor);
+    const weekMondayStr = fmtDateISO(weekMonday);
+    const isSelected = (weekMondayStr === currentLundiVal);
+    html += `<tr class="wcal-week-row${isSelected?' wcal-selected':''}" onclick="selectChefWeek('${weekMondayStr}')">`;
+    for (let d = 0; d < 7; d++) {
+      const day = addDays(cursor, d);
+      const otherMonth = day.getMonth() !== month;
+      html += `<td class="${otherMonth?'wcal-other-month':''}">${day.getDate()}</td>`;
+    }
+    html += `</tr>`;
+    cursor = addDays(cursor, 7);
+    // Arrêter dès que la semaine suivante commence bien après le mois affiché
+    if (cursor.getMonth() !== month && cursor > firstOfMonth && w >= 4) break;
+  }
+
+  html += `</tbody></table>
+    <div class="wcal-footer"><button type="button" onclick="clearChefWeek()">Effacer</button></div>`;
+
+  popup.innerHTML = html;
+}
+
+function wcalNavigate(delta) {
+  wcalViewDate = new Date(wcalViewDate.getFullYear(), wcalViewDate.getMonth() + delta, 1);
+  renderWeekCalendar();
+}
+
+function selectChefWeek(mondayStr) {
+  document.getElementById('chef-lundi').value = mondayStr;
+  const d = new Date(mondayStr + 'T00:00:00');
+  document.getElementById('chef-lundi-display').value =
+    `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} (S${getISOWeek(d)})`;
+  document.getElementById('chef-calendar-popup').style.display = 'none';
+}
+
+function clearChefWeek() {
+  document.getElementById('chef-lundi').value = '';
+  document.getElementById('chef-lundi-display').value = '';
+  document.getElementById('chef-calendar-popup').style.display = 'none';
+}
+
+// Fermer le calendrier si on clique en dehors
+document.addEventListener('click', function(e) {
+  const popup = document.getElementById('chef-calendar-popup');
+  const display = document.getElementById('chef-lundi-display');
+  if (!popup || !display) return;
+  if (popup.style.display === 'block' && !popup.contains(e.target) && e.target !== display) {
+    popup.style.display = 'none';
+  }
+});
 
 async function generateChef() {
   const lundi = document.getElementById('chef-lundi').value;
@@ -8984,22 +9169,103 @@ function resetChef() {
 function initChef() {
   const el = document.getElementById('chef-lundi');
   if (!el.value) {
-    el.value = fmtDateISO(getMondayOf(new Date()));
+    const monday = getMondayOf(new Date());
+    el.value = fmtDateISO(monday);
+    document.getElementById('chef-lundi-display').value =
+      `${String(monday.getDate()).padStart(2,'0')}/${String(monday.getMonth()+1).padStart(2,'0')}/${monday.getFullYear()} (S${getISOWeek(monday)})`;
   }
   resetChef();
 }
 
-function onChefLundiChange() {
-  const el = document.getElementById('chef-lundi');
-  if (!el.value) return;
-  const chosen = new Date(el.value + 'T00:00:00');
-  const monday = getMondayOf(chosen);
-  const mondayStr = fmtDateISO(monday);
-  if (mondayStr !== el.value) {
-    el.value = mondayStr;
-    toast('La date a été ajustée au lundi de la semaine (' + mondayStr.split('-').reverse().join('/') + ')', 'info');
+// ========== Calendrier semaine custom — Feuille Chef ==========
+let wcalViewDate = new Date(); // mois affiché dans le calendrier
+
+function toggleChefCalendar() {
+  const popup = document.getElementById('chef-calendar-popup');
+  const isOpen = popup.style.display === 'block';
+  if (isOpen) {
+    popup.style.display = 'none';
+  } else {
+    const current = document.getElementById('chef-lundi').value;
+    wcalViewDate = current ? new Date(current + 'T00:00:00') : new Date();
+    renderWeekCalendar();
+    popup.style.display = 'block';
   }
 }
+
+function renderWeekCalendar() {
+  const popup = document.getElementById('chef-calendar-popup');
+  const year = wcalViewDate.getFullYear();
+  const month = wcalViewDate.getMonth();
+  const monthLabel = MOIS_LONG[month] + ' ' + year;
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+
+  const currentLundiVal = document.getElementById('chef-lundi').value;
+
+  let html = `
+    <div class="wcal-header">
+      <button onclick="wcalNavigate(-1)" type="button">‹</button>
+      <span class="wcal-month-label">${monthLabel}</span>
+      <button onclick="wcalNavigate(1)" type="button">›</button>
+    </div>
+    <table class="wcal-grid">
+      <thead><tr><th>lun.</th><th>mar.</th><th>mer.</th><th>jeu.</th><th>ven.</th><th>sam.</th><th>dim.</th></tr></thead>
+      <tbody>`;
+
+  let cursor = new Date(startMonday);
+  // Afficher 6 semaines pour couvrir tout le mois affiché
+  for (let w = 0; w < 6; w++) {
+    const weekMonday = new Date(cursor);
+    const weekMondayStr = fmtDateISO(weekMonday);
+    const isSelected = (weekMondayStr === currentLundiVal);
+    html += `<tr class="wcal-week-row${isSelected?' wcal-selected':''}" onclick="selectChefWeek('${weekMondayStr}')">`;
+    for (let d = 0; d < 7; d++) {
+      const day = addDays(cursor, d);
+      const otherMonth = day.getMonth() !== month;
+      html += `<td class="${otherMonth?'wcal-other-month':''}">${day.getDate()}</td>`;
+    }
+    html += `</tr>`;
+    cursor = addDays(cursor, 7);
+    // Arrêter dès que la semaine suivante commence bien après le mois affiché
+    if (cursor.getMonth() !== month && cursor > firstOfMonth && w >= 4) break;
+  }
+
+  html += `</tbody></table>
+    <div class="wcal-footer"><button type="button" onclick="clearChefWeek()">Effacer</button></div>`;
+
+  popup.innerHTML = html;
+}
+
+function wcalNavigate(delta) {
+  wcalViewDate = new Date(wcalViewDate.getFullYear(), wcalViewDate.getMonth() + delta, 1);
+  renderWeekCalendar();
+}
+
+function selectChefWeek(mondayStr) {
+  document.getElementById('chef-lundi').value = mondayStr;
+  const d = new Date(mondayStr + 'T00:00:00');
+  document.getElementById('chef-lundi-display').value =
+    `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} (S${getISOWeek(d)})`;
+  document.getElementById('chef-calendar-popup').style.display = 'none';
+}
+
+function clearChefWeek() {
+  document.getElementById('chef-lundi').value = '';
+  document.getElementById('chef-lundi-display').value = '';
+  document.getElementById('chef-calendar-popup').style.display = 'none';
+}
+
+// Fermer le calendrier si on clique en dehors
+document.addEventListener('click', function(e) {
+  const popup = document.getElementById('chef-calendar-popup');
+  const display = document.getElementById('chef-lundi-display');
+  if (!popup || !display) return;
+  if (popup.style.display === 'block' && !popup.contains(e.target) && e.target !== display) {
+    popup.style.display = 'none';
+  }
+});
 
 async function generateChef() {
   const lundi = document.getElementById('chef-lundi').value;
@@ -12255,22 +12521,103 @@ function resetChef() {
 function initChef() {
   const el = document.getElementById('chef-lundi');
   if (!el.value) {
-    el.value = fmtDateISO(getMondayOf(new Date()));
+    const monday = getMondayOf(new Date());
+    el.value = fmtDateISO(monday);
+    document.getElementById('chef-lundi-display').value =
+      `${String(monday.getDate()).padStart(2,'0')}/${String(monday.getMonth()+1).padStart(2,'0')}/${monday.getFullYear()} (S${getISOWeek(monday)})`;
   }
   resetChef();
 }
 
-function onChefLundiChange() {
-  const el = document.getElementById('chef-lundi');
-  if (!el.value) return;
-  const chosen = new Date(el.value + 'T00:00:00');
-  const monday = getMondayOf(chosen);
-  const mondayStr = fmtDateISO(monday);
-  if (mondayStr !== el.value) {
-    el.value = mondayStr;
-    toast('La date a été ajustée au lundi de la semaine (' + mondayStr.split('-').reverse().join('/') + ')', 'info');
+// ========== Calendrier semaine custom — Feuille Chef ==========
+let wcalViewDate = new Date(); // mois affiché dans le calendrier
+
+function toggleChefCalendar() {
+  const popup = document.getElementById('chef-calendar-popup');
+  const isOpen = popup.style.display === 'block';
+  if (isOpen) {
+    popup.style.display = 'none';
+  } else {
+    const current = document.getElementById('chef-lundi').value;
+    wcalViewDate = current ? new Date(current + 'T00:00:00') : new Date();
+    renderWeekCalendar();
+    popup.style.display = 'block';
   }
 }
+
+function renderWeekCalendar() {
+  const popup = document.getElementById('chef-calendar-popup');
+  const year = wcalViewDate.getFullYear();
+  const month = wcalViewDate.getMonth();
+  const monthLabel = MOIS_LONG[month] + ' ' + year;
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+
+  const currentLundiVal = document.getElementById('chef-lundi').value;
+
+  let html = `
+    <div class="wcal-header">
+      <button onclick="wcalNavigate(-1)" type="button">‹</button>
+      <span class="wcal-month-label">${monthLabel}</span>
+      <button onclick="wcalNavigate(1)" type="button">›</button>
+    </div>
+    <table class="wcal-grid">
+      <thead><tr><th>lun.</th><th>mar.</th><th>mer.</th><th>jeu.</th><th>ven.</th><th>sam.</th><th>dim.</th></tr></thead>
+      <tbody>`;
+
+  let cursor = new Date(startMonday);
+  // Afficher 6 semaines pour couvrir tout le mois affiché
+  for (let w = 0; w < 6; w++) {
+    const weekMonday = new Date(cursor);
+    const weekMondayStr = fmtDateISO(weekMonday);
+    const isSelected = (weekMondayStr === currentLundiVal);
+    html += `<tr class="wcal-week-row${isSelected?' wcal-selected':''}" onclick="selectChefWeek('${weekMondayStr}')">`;
+    for (let d = 0; d < 7; d++) {
+      const day = addDays(cursor, d);
+      const otherMonth = day.getMonth() !== month;
+      html += `<td class="${otherMonth?'wcal-other-month':''}">${day.getDate()}</td>`;
+    }
+    html += `</tr>`;
+    cursor = addDays(cursor, 7);
+    // Arrêter dès que la semaine suivante commence bien après le mois affiché
+    if (cursor.getMonth() !== month && cursor > firstOfMonth && w >= 4) break;
+  }
+
+  html += `</tbody></table>
+    <div class="wcal-footer"><button type="button" onclick="clearChefWeek()">Effacer</button></div>`;
+
+  popup.innerHTML = html;
+}
+
+function wcalNavigate(delta) {
+  wcalViewDate = new Date(wcalViewDate.getFullYear(), wcalViewDate.getMonth() + delta, 1);
+  renderWeekCalendar();
+}
+
+function selectChefWeek(mondayStr) {
+  document.getElementById('chef-lundi').value = mondayStr;
+  const d = new Date(mondayStr + 'T00:00:00');
+  document.getElementById('chef-lundi-display').value =
+    `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} (S${getISOWeek(d)})`;
+  document.getElementById('chef-calendar-popup').style.display = 'none';
+}
+
+function clearChefWeek() {
+  document.getElementById('chef-lundi').value = '';
+  document.getElementById('chef-lundi-display').value = '';
+  document.getElementById('chef-calendar-popup').style.display = 'none';
+}
+
+// Fermer le calendrier si on clique en dehors
+document.addEventListener('click', function(e) {
+  const popup = document.getElementById('chef-calendar-popup');
+  const display = document.getElementById('chef-lundi-display');
+  if (!popup || !display) return;
+  if (popup.style.display === 'block' && !popup.contains(e.target) && e.target !== display) {
+    popup.style.display = 'none';
+  }
+});
 
 async function generateChef() {
   const lundi = document.getElementById('chef-lundi').value;
