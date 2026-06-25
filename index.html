@@ -1040,7 +1040,9 @@ async function sbInsert(table, row) { return sb(table,'POST',row); }
 async function sbUpdate(table, id, row) { return sb(table,'PATCH',row,`?id=eq.${id}`); }
 async function sbDelete(table, query) { return sb(table,'DELETE',null,query); }
 async function sbUpsert(table, row, conflict) {
-  const url = `${SUPABASE_URL}/rest/v1/${table}`;
+  // PostgREST attend la colonne de conflit en paramètre de requête (?on_conflict=...),
+  // pas en en-tête HTTP — l'en-tête 'on-conflict' est ignoré par l'API.
+  const url = `${SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflict)}`;
   const r = await fetch(url, {
     method:'POST',
     headers:{
@@ -1048,7 +1050,6 @@ async function sbUpsert(table, row, conflict) {
       'Authorization': `Bearer ${SUPABASE_ANON}`,
       'Content-Type': 'application/json',
       'Prefer': `resolution=merge-duplicates,return=representation`,
-      'on-conflict': conflict,
     },
     body: JSON.stringify(row)
   });
@@ -2847,11 +2848,11 @@ async function printChef() {
       const chefSnapshot = {
         maison_id: currentMaison.id,
         lundi: chefLundiVal,
-        fruits_non: document.getElementById('chef-cb-fruits-non').checked,
-        fruits_oui: document.getElementById('chef-cb-fruits-oui').checked,
+        fruits_non: document.getElementById('chef-cb-fruits-non')?.checked || false,
+        fruits_oui: document.getElementById('chef-cb-fruits-oui')?.checked || false,
         fruits_texte: getVal('chef-info-fruits'),
-        laitages_non: document.getElementById('chef-cb-laitages-non').checked,
-        laitages_oui: document.getElementById('chef-cb-laitages-oui').checked,
+        laitages_non: document.getElementById('chef-cb-laitages-non')?.checked || false,
+        laitages_oui: document.getElementById('chef-cb-laitages-oui')?.checked || false,
         laitages_texte: getVal('chef-info-laitages'),
         manquants: getVal('chef-info-manquants'),
         absences: getVal('chef-info-absences'),
@@ -4406,7 +4407,9 @@ async function sbInsert(table, row) { return sb(table,'POST',row); }
 async function sbUpdate(table, id, row) { return sb(table,'PATCH',row,`?id=eq.${id}`); }
 async function sbDelete(table, query) { return sb(table,'DELETE',null,query); }
 async function sbUpsert(table, row, conflict) {
-  const url = `${SUPABASE_URL}/rest/v1/${table}`;
+  // PostgREST attend la colonne de conflit en paramètre de requête (?on_conflict=...),
+  // pas en en-tête HTTP — l'en-tête 'on-conflict' est ignoré par l'API.
+  const url = `${SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflict)}`;
   const r = await fetch(url, {
     method:'POST',
     headers:{
@@ -4414,7 +4417,6 @@ async function sbUpsert(table, row, conflict) {
       'Authorization': `Bearer ${SUPABASE_ANON}`,
       'Content-Type': 'application/json',
       'Prefer': `resolution=merge-duplicates,return=representation`,
-      'on-conflict': conflict,
     },
     body: JSON.stringify(row)
   });
@@ -6212,11 +6214,11 @@ async function printChef() {
       const chefSnapshot = {
         maison_id: currentMaison.id,
         lundi: chefLundiVal,
-        fruits_non: document.getElementById('chef-cb-fruits-non').checked,
-        fruits_oui: document.getElementById('chef-cb-fruits-oui').checked,
+        fruits_non: document.getElementById('chef-cb-fruits-non')?.checked || false,
+        fruits_oui: document.getElementById('chef-cb-fruits-oui')?.checked || false,
         fruits_texte: getVal('chef-info-fruits'),
-        laitages_non: document.getElementById('chef-cb-laitages-non').checked,
-        laitages_oui: document.getElementById('chef-cb-laitages-oui').checked,
+        laitages_non: document.getElementById('chef-cb-laitages-non')?.checked || false,
+        laitages_oui: document.getElementById('chef-cb-laitages-oui')?.checked || false,
         laitages_texte: getVal('chef-info-laitages'),
         manquants: getVal('chef-info-manquants'),
         absences: getVal('chef-info-absences'),
@@ -7771,7 +7773,9 @@ async function sbInsert(table, row) { return sb(table,'POST',row); }
 async function sbUpdate(table, id, row) { return sb(table,'PATCH',row,`?id=eq.${id}`); }
 async function sbDelete(table, query) { return sb(table,'DELETE',null,query); }
 async function sbUpsert(table, row, conflict) {
-  const url = `${SUPABASE_URL}/rest/v1/${table}`;
+  // PostgREST attend la colonne de conflit en paramètre de requête (?on_conflict=...),
+  // pas en en-tête HTTP — l'en-tête 'on-conflict' est ignoré par l'API.
+  const url = `${SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflict)}`;
   const r = await fetch(url, {
     method:'POST',
     headers:{
@@ -7779,7 +7783,6 @@ async function sbUpsert(table, row, conflict) {
       'Authorization': `Bearer ${SUPABASE_ANON}`,
       'Content-Type': 'application/json',
       'Prefer': `resolution=merge-duplicates,return=representation`,
-      'on-conflict': conflict,
     },
     body: JSON.stringify(row)
   });
@@ -9577,11 +9580,11 @@ async function printChef() {
       const chefSnapshot = {
         maison_id: currentMaison.id,
         lundi: chefLundiVal,
-        fruits_non: document.getElementById('chef-cb-fruits-non').checked,
-        fruits_oui: document.getElementById('chef-cb-fruits-oui').checked,
+        fruits_non: document.getElementById('chef-cb-fruits-non')?.checked || false,
+        fruits_oui: document.getElementById('chef-cb-fruits-oui')?.checked || false,
         fruits_texte: getVal('chef-info-fruits'),
-        laitages_non: document.getElementById('chef-cb-laitages-non').checked,
-        laitages_oui: document.getElementById('chef-cb-laitages-oui').checked,
+        laitages_non: document.getElementById('chef-cb-laitages-non')?.checked || false,
+        laitages_oui: document.getElementById('chef-cb-laitages-oui')?.checked || false,
         laitages_texte: getVal('chef-info-laitages'),
         manquants: getVal('chef-info-manquants'),
         absences: getVal('chef-info-absences'),
@@ -11136,7 +11139,9 @@ async function sbInsert(table, row) { return sb(table,'POST',row); }
 async function sbUpdate(table, id, row) { return sb(table,'PATCH',row,`?id=eq.${id}`); }
 async function sbDelete(table, query) { return sb(table,'DELETE',null,query); }
 async function sbUpsert(table, row, conflict) {
-  const url = `${SUPABASE_URL}/rest/v1/${table}`;
+  // PostgREST attend la colonne de conflit en paramètre de requête (?on_conflict=...),
+  // pas en en-tête HTTP — l'en-tête 'on-conflict' est ignoré par l'API.
+  const url = `${SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflict)}`;
   const r = await fetch(url, {
     method:'POST',
     headers:{
@@ -11144,7 +11149,6 @@ async function sbUpsert(table, row, conflict) {
       'Authorization': `Bearer ${SUPABASE_ANON}`,
       'Content-Type': 'application/json',
       'Prefer': `resolution=merge-duplicates,return=representation`,
-      'on-conflict': conflict,
     },
     body: JSON.stringify(row)
   });
@@ -12942,11 +12946,11 @@ async function printChef() {
       const chefSnapshot = {
         maison_id: currentMaison.id,
         lundi: chefLundiVal,
-        fruits_non: document.getElementById('chef-cb-fruits-non').checked,
-        fruits_oui: document.getElementById('chef-cb-fruits-oui').checked,
+        fruits_non: document.getElementById('chef-cb-fruits-non')?.checked || false,
+        fruits_oui: document.getElementById('chef-cb-fruits-oui')?.checked || false,
         fruits_texte: getVal('chef-info-fruits'),
-        laitages_non: document.getElementById('chef-cb-laitages-non').checked,
-        laitages_oui: document.getElementById('chef-cb-laitages-oui').checked,
+        laitages_non: document.getElementById('chef-cb-laitages-non')?.checked || false,
+        laitages_oui: document.getElementById('chef-cb-laitages-oui')?.checked || false,
         laitages_texte: getVal('chef-info-laitages'),
         manquants: getVal('chef-info-manquants'),
         absences: getVal('chef-info-absences'),
