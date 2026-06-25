@@ -833,6 +833,9 @@
       <div class="form-group"><label>Date de naissance</label><input type="date" id="res-naissance"></div>
       <div class="form-group"><label>N° Identification Bail</label><input type="text" id="res-bail" maxlength="20"></div>
       <div class="form-group"><label>Codification SEPA</label><input type="text" id="res-sepa" maxlength="20"></div>
+      <div class="form-group"><label>Téléphone</label><input type="tel" id="res-tel" maxlength="14" placeholder="06 12 34 56 78" oninput="formatTelFrance(this)"></div>
+      <div class="form-group"><label>Contact d'urgence</label><input type="text" id="res-contact-urgence" maxlength="50" placeholder="Nom du contact"></div>
+      <div class="form-group"><label>Tél. contact d'urgence</label><input type="tel" id="res-tel-urgence" maxlength="20" placeholder="+33 (6) 63 73 70 67"></div>
     </div>
     <div id="res-nr-info" style="display:none;margin-bottom:12px" class="info-box">
       <strong>Non Résident (NR)</strong> — Seuls Nom et Prénom sont obligatoires pour ce type de fiche.
@@ -1285,6 +1288,12 @@ async function hashPwd(pwd) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
+function formatTelFrance(el) {
+  let digits = el.value.replace(/\D/g,'').slice(0,10);
+  let formatted = digits.replace(/(\d{2})(?=\d)/g, '$1 ').trim();
+  el.value = formatted;
+}
+
 function isReadOnly() {
   return currentUser && currentUser.role === 'lecteur';
 }
@@ -1437,6 +1446,9 @@ function openResidentModal(id=null) {
       document.getElementById('res-naissance').value = r.date_naissance||'';
       document.getElementById('res-bail').value = r.num_bail||'';
       document.getElementById('res-sepa').value = r.codif_sepa||'';
+      document.getElementById('res-tel').value = r.telephone||'';
+      document.getElementById('res-contact-urgence').value = r.contact_urgence||'';
+      document.getElementById('res-tel-urgence').value = r.tel_urgence||'';
     }
   }
   openModal('modal-resident');
@@ -1484,6 +1496,9 @@ async function saveResident() {
     date_naissance: document.getElementById('res-naissance').value || null,
     num_bail: document.getElementById('res-bail').value,
     codif_sepa: document.getElementById('res-sepa').value,
+    telephone: document.getElementById('res-tel').value || null,
+    contact_urgence: document.getElementById('res-contact-urgence').value || null,
+    tel_urgence: document.getElementById('res-tel-urgence').value || null,
   };
 
   const id = document.getElementById('res-id').value;
@@ -1739,10 +1754,10 @@ async function populateSaisieResidents() {
     if (!lundi) return true;
     // Les NR (appt='NR') sont toujours actifs — pas de notion d'entrée/sortie
     if ((r.appt||'').toUpperCase() === 'NR') return true;
-    // Actif si date_entree <= dimanche ET (pas de date_sortie OU date_sortie >= lundi)
+    // Actif si date_entree <= dimanche ET (pas de date_sortie OU date_sortie + 35j >= lundi)
     const entree = r.date_entree || '0000-01-01';
-    const sortie = r.date_sortie || '9999-12-31';
-    return entree <= dimanche && sortie >= lundi;
+    const sortieLimite = r.date_sortie ? fmtDateISO(addDays(new Date(r.date_sortie), 35)) : '9999-12-31';
+    return entree <= dimanche && sortieLimite >= lundi;
   });
 
   sel.innerHTML = '<option value="">— Choisir un résident —</option>';
@@ -2556,12 +2571,31 @@ async function generateChef() {
 
     document.getElementById('chef-output').innerHTML = html;
 
-    // Sauvegarder d'abord les valeurs existantes
+    // Sauvegarder d'abord les valeurs existantes (session en cours)
     const savedVals = {};
     const oldDiv0 = document.getElementById('chef-infos-inputs');
     if (oldDiv0) {
       oldDiv0.querySelectorAll('input[type=text]').forEach(i => { savedVals[i.id] = i.value; });
       oldDiv0.querySelectorAll('input[type=checkbox]').forEach(i => { savedVals[i.id] = i.checked; });
+    } else {
+      // Pas de saisie en cours : tenter de recharger un snapshot précédemment enregistré pour cette semaine
+      try {
+        const snap = await sbSelect('dl_feuilles_chef', `?maison_id=eq.${currentMaison.id}&lundi=eq.${lundi}&limit=1`);
+        if (snap && snap[0]) {
+          const s = snap[0];
+          savedVals['chef-cb-fruits-non'] = s.fruits_non;
+          savedVals['chef-cb-fruits-oui'] = s.fruits_oui;
+          savedVals['chef-info-fruits'] = s.fruits_texte;
+          savedVals['chef-cb-laitages-non'] = s.laitages_non;
+          savedVals['chef-cb-laitages-oui'] = s.laitages_oui;
+          savedVals['chef-info-laitages'] = s.laitages_texte;
+          savedVals['chef-info-manquants'] = s.manquants;
+          savedVals['chef-info-absences'] = s.absences;
+          savedVals['chef-info-hospit'] = s.hospitalisations;
+          savedVals['chef-info-nouveaux'] = s.nouveaux;
+          savedVals['chef-info-departs'] = s.departs;
+        }
+      } catch(e) { /* silencieux */ }
     }
 
     // Créer dynamiquement la zone de saisie des infos complémentaires
@@ -2569,7 +2603,6 @@ async function generateChef() {
     const INFOS_ROWS = [
       { id:'chef-info-fruits',    label:'Envie de fruits',    val: savedVals['chef-info-fruits']||'' },
       { id:'chef-info-laitages',  label:'Envie de laitages',  val: savedVals['chef-info-laitages']||'' },
-      { id:'chef-info-anniv',     label:'Anniversaire',        val: savedVals['chef-info-anniv'] !== undefined ? savedVals['chef-info-anniv'] : annivPreFill },
       { id:'chef-info-manquants', label:'Manquants',           val: savedVals['chef-info-manquants']||'' },
       { id:'chef-info-absences',  label:'Absences',            val: savedVals['chef-info-absences']||'' },
       { id:'chef-info-hospit',    label:'Hospitalisations',    val: savedVals['chef-info-hospit']||'' },
@@ -2593,14 +2626,11 @@ async function generateChef() {
         <td style="padding:4px 6px;border:1px solid #ccc">${inp('chef-info-laitages', INFOS_ROWS[1].val)}</td>
       </tr>`,
       `<tr>
-        <td rowspan="2" style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px;vertical-align:middle">Anniversaire</td>
+        <td style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px">Anniversaire</td>
         <td colspan="3" style="padding:6px 8px;border:1px solid #ccc;font-size:11px;color:#333;font-style:italic">${annivPreFill || '&nbsp;'}</td>
-      </tr>
-      <tr>
-        <td colspan="3" style="padding:4px 6px;border:1px solid #ccc">${inp('chef-info-anniv', INFOS_ROWS[2].val)}</td>
       </tr>`,
       ...['Manquants','Absences','Hospitalisations','Nouveaux','Départs'].map((label,i) => {
-        const row = INFOS_ROWS[3+i];
+        const row = INFOS_ROWS[2+i];
         return `<tr>
           <td style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px">${label}</td>
           <td colspan="2" style="padding:6px 8px;border:1px solid #ccc"></td>
@@ -2633,7 +2663,7 @@ async function generateChef() {
   }
 }
 
-function printChef() {
+async function printChef() {
   const content = document.getElementById('chef-print-content');
   if (!content) { toast('Générez d\'abord la feuille','error'); return; }
 
@@ -2643,6 +2673,32 @@ function printChef() {
   const getCb   = id => (document.getElementById(id)||{}).checked ? '✓' : '☐';
   const fruitsNon = getCb('chef-cb-fruits-non');   const fruitsOui = getCb('chef-cb-fruits-oui');
   const laitNon   = getCb('chef-cb-laitages-non'); const laitOui   = getCb('chef-cb-laitages-oui');
+
+  // Sauvegarde en base avant impression (upsert sur maison_id + semaine)
+  const chefLundiVal = document.getElementById('chef-lundi').value || '';
+  if (chefLundiVal) {
+    try {
+      const chefSnapshot = {
+        maison_id: currentMaison.id,
+        lundi: chefLundiVal,
+        fruits_non: document.getElementById('chef-cb-fruits-non').checked,
+        fruits_oui: document.getElementById('chef-cb-fruits-oui').checked,
+        fruits_texte: getVal('chef-info-fruits'),
+        laitages_non: document.getElementById('chef-cb-laitages-non').checked,
+        laitages_oui: document.getElementById('chef-cb-laitages-oui').checked,
+        laitages_texte: getVal('chef-info-laitages'),
+        manquants: getVal('chef-info-manquants'),
+        absences: getVal('chef-info-absences'),
+        hospitalisations: getVal('chef-info-hospit'),
+        nouveaux: getVal('chef-info-nouveaux'),
+        departs: getVal('chef-info-departs'),
+        updated_at: new Date().toISOString(),
+      };
+      await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
+    } catch(e) {
+      console.warn('Sauvegarde Feuille Chef échouée:', e.message);
+    }
+  }
   const chefInfosHTML = `
     <div style="margin-top:20px;font-family:Calibri,Arial,sans-serif">
       <div style="font-weight:700;font-size:12px;margin-bottom:8px;border-bottom:2px solid #333;padding-bottom:4px">Informations complémentaires</div>
@@ -2660,11 +2716,8 @@ function printChef() {
           <td style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-laitages')}</td>
         </tr>
         <tr>
-          <td rowspan="2" style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700;vertical-align:middle">Anniversaire</td>
+          <td style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700">Anniversaire</td>
           <td colspan="3" style="padding:5px 7px;border:1px solid #555;color:#555;font-size:10px;font-style:italic">${annivAuto}</td>
-        </tr>
-        <tr>
-          <td colspan="3" style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-anniv')}</td>
         </tr>
         <tr><td style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700">Manquants</td>
           <td colspan="3" style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-manquants')}</td></tr>
@@ -3011,7 +3064,7 @@ async function exportResidentsXLSX() {
       'surface','surface_carrez','categorie','nb_residents','revenu_fiscal',
       'plafond_pls','eligible_pls','bailleur_social','loyer','provision_charges',
       'depot_garantie','honoraires_edl','honoraires_loc','date_entree','date_sortie',
-      'date_naissance','num_bail','codif_sepa'
+      'date_naissance','num_bail','codif_sepa','telephone','contact_urgence','tel_urgence'
     ];
 
     const rows = presents.map(r => headers.map(h => {
@@ -3260,14 +3313,14 @@ async function loadReguJour() {
   totalBox.style.display = 'none';
 
   try {
-    // Résidents actifs : date de sortie nulle OU postérieure à la date choisie
+    // Résidents actifs : date de sortie nulle OU + 35 jours postérieure à la date choisie
     const residentsFiltered = allResidents.filter(r => {
       // Les NR sont toujours actifs
       if ((r.appt||'').toUpperCase() === 'NR') return true;
       if (!r.date_entree && !r.date_sortie) return true;
       const entree = r.date_entree || '0000-01-01';
-      const sortie = r.date_sortie || '9999-12-31';
-      return entree <= dateStr && sortie >= dateStr;
+      const sortieLimite = r.date_sortie ? fmtDateISO(addDays(new Date(r.date_sortie), 35)) : '9999-12-31';
+      return entree <= dateStr && sortieLimite >= dateStr;
     });
     const residents = [
       ...residentsFiltered.filter(r => r.nom === 'GARDIEN'),
@@ -4472,6 +4525,12 @@ async function hashPwd(pwd) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
+function formatTelFrance(el) {
+  let digits = el.value.replace(/\D/g,'').slice(0,10);
+  let formatted = digits.replace(/(\d{2})(?=\d)/g, '$1 ').trim();
+  el.value = formatted;
+}
+
 function isReadOnly() {
   return currentUser && currentUser.role === 'lecteur';
 }
@@ -4624,6 +4683,9 @@ function openResidentModal(id=null) {
       document.getElementById('res-naissance').value = r.date_naissance||'';
       document.getElementById('res-bail').value = r.num_bail||'';
       document.getElementById('res-sepa').value = r.codif_sepa||'';
+      document.getElementById('res-tel').value = r.telephone||'';
+      document.getElementById('res-contact-urgence').value = r.contact_urgence||'';
+      document.getElementById('res-tel-urgence').value = r.tel_urgence||'';
     }
   }
   openModal('modal-resident');
@@ -4671,6 +4733,9 @@ async function saveResident() {
     date_naissance: document.getElementById('res-naissance').value || null,
     num_bail: document.getElementById('res-bail').value,
     codif_sepa: document.getElementById('res-sepa').value,
+    telephone: document.getElementById('res-tel').value || null,
+    contact_urgence: document.getElementById('res-contact-urgence').value || null,
+    tel_urgence: document.getElementById('res-tel-urgence').value || null,
   };
 
   const id = document.getElementById('res-id').value;
@@ -4926,10 +4991,10 @@ async function populateSaisieResidents() {
     if (!lundi) return true;
     // Les NR (appt='NR') sont toujours actifs — pas de notion d'entrée/sortie
     if ((r.appt||'').toUpperCase() === 'NR') return true;
-    // Actif si date_entree <= dimanche ET (pas de date_sortie OU date_sortie >= lundi)
+    // Actif si date_entree <= dimanche ET (pas de date_sortie OU date_sortie + 35j >= lundi)
     const entree = r.date_entree || '0000-01-01';
-    const sortie = r.date_sortie || '9999-12-31';
-    return entree <= dimanche && sortie >= lundi;
+    const sortieLimite = r.date_sortie ? fmtDateISO(addDays(new Date(r.date_sortie), 35)) : '9999-12-31';
+    return entree <= dimanche && sortieLimite >= lundi;
   });
 
   sel.innerHTML = '<option value="">— Choisir un résident —</option>';
@@ -5743,12 +5808,31 @@ async function generateChef() {
 
     document.getElementById('chef-output').innerHTML = html;
 
-    // Sauvegarder d'abord les valeurs existantes
+    // Sauvegarder d'abord les valeurs existantes (session en cours)
     const savedVals = {};
     const oldDiv0 = document.getElementById('chef-infos-inputs');
     if (oldDiv0) {
       oldDiv0.querySelectorAll('input[type=text]').forEach(i => { savedVals[i.id] = i.value; });
       oldDiv0.querySelectorAll('input[type=checkbox]').forEach(i => { savedVals[i.id] = i.checked; });
+    } else {
+      // Pas de saisie en cours : tenter de recharger un snapshot précédemment enregistré pour cette semaine
+      try {
+        const snap = await sbSelect('dl_feuilles_chef', `?maison_id=eq.${currentMaison.id}&lundi=eq.${lundi}&limit=1`);
+        if (snap && snap[0]) {
+          const s = snap[0];
+          savedVals['chef-cb-fruits-non'] = s.fruits_non;
+          savedVals['chef-cb-fruits-oui'] = s.fruits_oui;
+          savedVals['chef-info-fruits'] = s.fruits_texte;
+          savedVals['chef-cb-laitages-non'] = s.laitages_non;
+          savedVals['chef-cb-laitages-oui'] = s.laitages_oui;
+          savedVals['chef-info-laitages'] = s.laitages_texte;
+          savedVals['chef-info-manquants'] = s.manquants;
+          savedVals['chef-info-absences'] = s.absences;
+          savedVals['chef-info-hospit'] = s.hospitalisations;
+          savedVals['chef-info-nouveaux'] = s.nouveaux;
+          savedVals['chef-info-departs'] = s.departs;
+        }
+      } catch(e) { /* silencieux */ }
     }
 
     // Créer dynamiquement la zone de saisie des infos complémentaires
@@ -5756,7 +5840,6 @@ async function generateChef() {
     const INFOS_ROWS = [
       { id:'chef-info-fruits',    label:'Envie de fruits',    val: savedVals['chef-info-fruits']||'' },
       { id:'chef-info-laitages',  label:'Envie de laitages',  val: savedVals['chef-info-laitages']||'' },
-      { id:'chef-info-anniv',     label:'Anniversaire',        val: savedVals['chef-info-anniv'] !== undefined ? savedVals['chef-info-anniv'] : annivPreFill },
       { id:'chef-info-manquants', label:'Manquants',           val: savedVals['chef-info-manquants']||'' },
       { id:'chef-info-absences',  label:'Absences',            val: savedVals['chef-info-absences']||'' },
       { id:'chef-info-hospit',    label:'Hospitalisations',    val: savedVals['chef-info-hospit']||'' },
@@ -5780,14 +5863,11 @@ async function generateChef() {
         <td style="padding:4px 6px;border:1px solid #ccc">${inp('chef-info-laitages', INFOS_ROWS[1].val)}</td>
       </tr>`,
       `<tr>
-        <td rowspan="2" style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px;vertical-align:middle">Anniversaire</td>
+        <td style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px">Anniversaire</td>
         <td colspan="3" style="padding:6px 8px;border:1px solid #ccc;font-size:11px;color:#333;font-style:italic">${annivPreFill || '&nbsp;'}</td>
-      </tr>
-      <tr>
-        <td colspan="3" style="padding:4px 6px;border:1px solid #ccc">${inp('chef-info-anniv', INFOS_ROWS[2].val)}</td>
       </tr>`,
       ...['Manquants','Absences','Hospitalisations','Nouveaux','Départs'].map((label,i) => {
-        const row = INFOS_ROWS[3+i];
+        const row = INFOS_ROWS[2+i];
         return `<tr>
           <td style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px">${label}</td>
           <td colspan="2" style="padding:6px 8px;border:1px solid #ccc"></td>
@@ -5820,7 +5900,7 @@ async function generateChef() {
   }
 }
 
-function printChef() {
+async function printChef() {
   const content = document.getElementById('chef-print-content');
   if (!content) { toast('Générez d\'abord la feuille','error'); return; }
 
@@ -5830,6 +5910,32 @@ function printChef() {
   const getCb   = id => (document.getElementById(id)||{}).checked ? '✓' : '☐';
   const fruitsNon = getCb('chef-cb-fruits-non');   const fruitsOui = getCb('chef-cb-fruits-oui');
   const laitNon   = getCb('chef-cb-laitages-non'); const laitOui   = getCb('chef-cb-laitages-oui');
+
+  // Sauvegarde en base avant impression (upsert sur maison_id + semaine)
+  const chefLundiVal = document.getElementById('chef-lundi').value || '';
+  if (chefLundiVal) {
+    try {
+      const chefSnapshot = {
+        maison_id: currentMaison.id,
+        lundi: chefLundiVal,
+        fruits_non: document.getElementById('chef-cb-fruits-non').checked,
+        fruits_oui: document.getElementById('chef-cb-fruits-oui').checked,
+        fruits_texte: getVal('chef-info-fruits'),
+        laitages_non: document.getElementById('chef-cb-laitages-non').checked,
+        laitages_oui: document.getElementById('chef-cb-laitages-oui').checked,
+        laitages_texte: getVal('chef-info-laitages'),
+        manquants: getVal('chef-info-manquants'),
+        absences: getVal('chef-info-absences'),
+        hospitalisations: getVal('chef-info-hospit'),
+        nouveaux: getVal('chef-info-nouveaux'),
+        departs: getVal('chef-info-departs'),
+        updated_at: new Date().toISOString(),
+      };
+      await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
+    } catch(e) {
+      console.warn('Sauvegarde Feuille Chef échouée:', e.message);
+    }
+  }
   const chefInfosHTML = `
     <div style="margin-top:20px;font-family:Calibri,Arial,sans-serif">
       <div style="font-weight:700;font-size:12px;margin-bottom:8px;border-bottom:2px solid #333;padding-bottom:4px">Informations complémentaires</div>
@@ -5847,11 +5953,8 @@ function printChef() {
           <td style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-laitages')}</td>
         </tr>
         <tr>
-          <td rowspan="2" style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700;vertical-align:middle">Anniversaire</td>
+          <td style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700">Anniversaire</td>
           <td colspan="3" style="padding:5px 7px;border:1px solid #555;color:#555;font-size:10px;font-style:italic">${annivAuto}</td>
-        </tr>
-        <tr>
-          <td colspan="3" style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-anniv')}</td>
         </tr>
         <tr><td style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700">Manquants</td>
           <td colspan="3" style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-manquants')}</td></tr>
@@ -6198,7 +6301,7 @@ async function exportResidentsXLSX() {
       'surface','surface_carrez','categorie','nb_residents','revenu_fiscal',
       'plafond_pls','eligible_pls','bailleur_social','loyer','provision_charges',
       'depot_garantie','honoraires_edl','honoraires_loc','date_entree','date_sortie',
-      'date_naissance','num_bail','codif_sepa'
+      'date_naissance','num_bail','codif_sepa','telephone','contact_urgence','tel_urgence'
     ];
 
     const rows = presents.map(r => headers.map(h => {
@@ -6447,14 +6550,14 @@ async function loadReguJour() {
   totalBox.style.display = 'none';
 
   try {
-    // Résidents actifs : date de sortie nulle OU postérieure à la date choisie
+    // Résidents actifs : date de sortie nulle OU + 35 jours postérieure à la date choisie
     const residentsFiltered = allResidents.filter(r => {
       // Les NR sont toujours actifs
       if ((r.appt||'').toUpperCase() === 'NR') return true;
       if (!r.date_entree && !r.date_sortie) return true;
       const entree = r.date_entree || '0000-01-01';
-      const sortie = r.date_sortie || '9999-12-31';
-      return entree <= dateStr && sortie >= dateStr;
+      const sortieLimite = r.date_sortie ? fmtDateISO(addDays(new Date(r.date_sortie), 35)) : '9999-12-31';
+      return entree <= dateStr && sortieLimite >= dateStr;
     });
     const residents = [
       ...residentsFiltered.filter(r => r.nom === 'GARDIEN'),
@@ -7659,6 +7762,12 @@ async function hashPwd(pwd) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
+function formatTelFrance(el) {
+  let digits = el.value.replace(/\D/g,'').slice(0,10);
+  let formatted = digits.replace(/(\d{2})(?=\d)/g, '$1 ').trim();
+  el.value = formatted;
+}
+
 function isReadOnly() {
   return currentUser && currentUser.role === 'lecteur';
 }
@@ -7811,6 +7920,9 @@ function openResidentModal(id=null) {
       document.getElementById('res-naissance').value = r.date_naissance||'';
       document.getElementById('res-bail').value = r.num_bail||'';
       document.getElementById('res-sepa').value = r.codif_sepa||'';
+      document.getElementById('res-tel').value = r.telephone||'';
+      document.getElementById('res-contact-urgence').value = r.contact_urgence||'';
+      document.getElementById('res-tel-urgence').value = r.tel_urgence||'';
     }
   }
   openModal('modal-resident');
@@ -7858,6 +7970,9 @@ async function saveResident() {
     date_naissance: document.getElementById('res-naissance').value || null,
     num_bail: document.getElementById('res-bail').value,
     codif_sepa: document.getElementById('res-sepa').value,
+    telephone: document.getElementById('res-tel').value || null,
+    contact_urgence: document.getElementById('res-contact-urgence').value || null,
+    tel_urgence: document.getElementById('res-tel-urgence').value || null,
   };
 
   const id = document.getElementById('res-id').value;
@@ -8113,10 +8228,10 @@ async function populateSaisieResidents() {
     if (!lundi) return true;
     // Les NR (appt='NR') sont toujours actifs — pas de notion d'entrée/sortie
     if ((r.appt||'').toUpperCase() === 'NR') return true;
-    // Actif si date_entree <= dimanche ET (pas de date_sortie OU date_sortie >= lundi)
+    // Actif si date_entree <= dimanche ET (pas de date_sortie OU date_sortie + 35j >= lundi)
     const entree = r.date_entree || '0000-01-01';
-    const sortie = r.date_sortie || '9999-12-31';
-    return entree <= dimanche && sortie >= lundi;
+    const sortieLimite = r.date_sortie ? fmtDateISO(addDays(new Date(r.date_sortie), 35)) : '9999-12-31';
+    return entree <= dimanche && sortieLimite >= lundi;
   });
 
   sel.innerHTML = '<option value="">— Choisir un résident —</option>';
@@ -8930,12 +9045,31 @@ async function generateChef() {
 
     document.getElementById('chef-output').innerHTML = html;
 
-    // Sauvegarder d'abord les valeurs existantes
+    // Sauvegarder d'abord les valeurs existantes (session en cours)
     const savedVals = {};
     const oldDiv0 = document.getElementById('chef-infos-inputs');
     if (oldDiv0) {
       oldDiv0.querySelectorAll('input[type=text]').forEach(i => { savedVals[i.id] = i.value; });
       oldDiv0.querySelectorAll('input[type=checkbox]').forEach(i => { savedVals[i.id] = i.checked; });
+    } else {
+      // Pas de saisie en cours : tenter de recharger un snapshot précédemment enregistré pour cette semaine
+      try {
+        const snap = await sbSelect('dl_feuilles_chef', `?maison_id=eq.${currentMaison.id}&lundi=eq.${lundi}&limit=1`);
+        if (snap && snap[0]) {
+          const s = snap[0];
+          savedVals['chef-cb-fruits-non'] = s.fruits_non;
+          savedVals['chef-cb-fruits-oui'] = s.fruits_oui;
+          savedVals['chef-info-fruits'] = s.fruits_texte;
+          savedVals['chef-cb-laitages-non'] = s.laitages_non;
+          savedVals['chef-cb-laitages-oui'] = s.laitages_oui;
+          savedVals['chef-info-laitages'] = s.laitages_texte;
+          savedVals['chef-info-manquants'] = s.manquants;
+          savedVals['chef-info-absences'] = s.absences;
+          savedVals['chef-info-hospit'] = s.hospitalisations;
+          savedVals['chef-info-nouveaux'] = s.nouveaux;
+          savedVals['chef-info-departs'] = s.departs;
+        }
+      } catch(e) { /* silencieux */ }
     }
 
     // Créer dynamiquement la zone de saisie des infos complémentaires
@@ -8943,7 +9077,6 @@ async function generateChef() {
     const INFOS_ROWS = [
       { id:'chef-info-fruits',    label:'Envie de fruits',    val: savedVals['chef-info-fruits']||'' },
       { id:'chef-info-laitages',  label:'Envie de laitages',  val: savedVals['chef-info-laitages']||'' },
-      { id:'chef-info-anniv',     label:'Anniversaire',        val: savedVals['chef-info-anniv'] !== undefined ? savedVals['chef-info-anniv'] : annivPreFill },
       { id:'chef-info-manquants', label:'Manquants',           val: savedVals['chef-info-manquants']||'' },
       { id:'chef-info-absences',  label:'Absences',            val: savedVals['chef-info-absences']||'' },
       { id:'chef-info-hospit',    label:'Hospitalisations',    val: savedVals['chef-info-hospit']||'' },
@@ -8967,14 +9100,11 @@ async function generateChef() {
         <td style="padding:4px 6px;border:1px solid #ccc">${inp('chef-info-laitages', INFOS_ROWS[1].val)}</td>
       </tr>`,
       `<tr>
-        <td rowspan="2" style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px;vertical-align:middle">Anniversaire</td>
+        <td style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px">Anniversaire</td>
         <td colspan="3" style="padding:6px 8px;border:1px solid #ccc;font-size:11px;color:#333;font-style:italic">${annivPreFill || '&nbsp;'}</td>
-      </tr>
-      <tr>
-        <td colspan="3" style="padding:4px 6px;border:1px solid #ccc">${inp('chef-info-anniv', INFOS_ROWS[2].val)}</td>
       </tr>`,
       ...['Manquants','Absences','Hospitalisations','Nouveaux','Départs'].map((label,i) => {
-        const row = INFOS_ROWS[3+i];
+        const row = INFOS_ROWS[2+i];
         return `<tr>
           <td style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px">${label}</td>
           <td colspan="2" style="padding:6px 8px;border:1px solid #ccc"></td>
@@ -9007,7 +9137,7 @@ async function generateChef() {
   }
 }
 
-function printChef() {
+async function printChef() {
   const content = document.getElementById('chef-print-content');
   if (!content) { toast('Générez d\'abord la feuille','error'); return; }
 
@@ -9017,6 +9147,32 @@ function printChef() {
   const getCb   = id => (document.getElementById(id)||{}).checked ? '✓' : '☐';
   const fruitsNon = getCb('chef-cb-fruits-non');   const fruitsOui = getCb('chef-cb-fruits-oui');
   const laitNon   = getCb('chef-cb-laitages-non'); const laitOui   = getCb('chef-cb-laitages-oui');
+
+  // Sauvegarde en base avant impression (upsert sur maison_id + semaine)
+  const chefLundiVal = document.getElementById('chef-lundi').value || '';
+  if (chefLundiVal) {
+    try {
+      const chefSnapshot = {
+        maison_id: currentMaison.id,
+        lundi: chefLundiVal,
+        fruits_non: document.getElementById('chef-cb-fruits-non').checked,
+        fruits_oui: document.getElementById('chef-cb-fruits-oui').checked,
+        fruits_texte: getVal('chef-info-fruits'),
+        laitages_non: document.getElementById('chef-cb-laitages-non').checked,
+        laitages_oui: document.getElementById('chef-cb-laitages-oui').checked,
+        laitages_texte: getVal('chef-info-laitages'),
+        manquants: getVal('chef-info-manquants'),
+        absences: getVal('chef-info-absences'),
+        hospitalisations: getVal('chef-info-hospit'),
+        nouveaux: getVal('chef-info-nouveaux'),
+        departs: getVal('chef-info-departs'),
+        updated_at: new Date().toISOString(),
+      };
+      await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
+    } catch(e) {
+      console.warn('Sauvegarde Feuille Chef échouée:', e.message);
+    }
+  }
   const chefInfosHTML = `
     <div style="margin-top:20px;font-family:Calibri,Arial,sans-serif">
       <div style="font-weight:700;font-size:12px;margin-bottom:8px;border-bottom:2px solid #333;padding-bottom:4px">Informations complémentaires</div>
@@ -9034,11 +9190,8 @@ function printChef() {
           <td style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-laitages')}</td>
         </tr>
         <tr>
-          <td rowspan="2" style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700;vertical-align:middle">Anniversaire</td>
+          <td style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700">Anniversaire</td>
           <td colspan="3" style="padding:5px 7px;border:1px solid #555;color:#555;font-size:10px;font-style:italic">${annivAuto}</td>
-        </tr>
-        <tr>
-          <td colspan="3" style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-anniv')}</td>
         </tr>
         <tr><td style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700">Manquants</td>
           <td colspan="3" style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-manquants')}</td></tr>
@@ -9385,7 +9538,7 @@ async function exportResidentsXLSX() {
       'surface','surface_carrez','categorie','nb_residents','revenu_fiscal',
       'plafond_pls','eligible_pls','bailleur_social','loyer','provision_charges',
       'depot_garantie','honoraires_edl','honoraires_loc','date_entree','date_sortie',
-      'date_naissance','num_bail','codif_sepa'
+      'date_naissance','num_bail','codif_sepa','telephone','contact_urgence','tel_urgence'
     ];
 
     const rows = presents.map(r => headers.map(h => {
@@ -9634,14 +9787,14 @@ async function loadReguJour() {
   totalBox.style.display = 'none';
 
   try {
-    // Résidents actifs : date de sortie nulle OU postérieure à la date choisie
+    // Résidents actifs : date de sortie nulle OU + 35 jours postérieure à la date choisie
     const residentsFiltered = allResidents.filter(r => {
       // Les NR sont toujours actifs
       if ((r.appt||'').toUpperCase() === 'NR') return true;
       if (!r.date_entree && !r.date_sortie) return true;
       const entree = r.date_entree || '0000-01-01';
-      const sortie = r.date_sortie || '9999-12-31';
-      return entree <= dateStr && sortie >= dateStr;
+      const sortieLimite = r.date_sortie ? fmtDateISO(addDays(new Date(r.date_sortie), 35)) : '9999-12-31';
+      return entree <= dateStr && sortieLimite >= dateStr;
     });
     const residents = [
       ...residentsFiltered.filter(r => r.nom === 'GARDIEN'),
@@ -10846,6 +10999,12 @@ async function hashPwd(pwd) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
+function formatTelFrance(el) {
+  let digits = el.value.replace(/\D/g,'').slice(0,10);
+  let formatted = digits.replace(/(\d{2})(?=\d)/g, '$1 ').trim();
+  el.value = formatted;
+}
+
 function isReadOnly() {
   return currentUser && currentUser.role === 'lecteur';
 }
@@ -10998,6 +11157,9 @@ function openResidentModal(id=null) {
       document.getElementById('res-naissance').value = r.date_naissance||'';
       document.getElementById('res-bail').value = r.num_bail||'';
       document.getElementById('res-sepa').value = r.codif_sepa||'';
+      document.getElementById('res-tel').value = r.telephone||'';
+      document.getElementById('res-contact-urgence').value = r.contact_urgence||'';
+      document.getElementById('res-tel-urgence').value = r.tel_urgence||'';
     }
   }
   openModal('modal-resident');
@@ -11045,6 +11207,9 @@ async function saveResident() {
     date_naissance: document.getElementById('res-naissance').value || null,
     num_bail: document.getElementById('res-bail').value,
     codif_sepa: document.getElementById('res-sepa').value,
+    telephone: document.getElementById('res-tel').value || null,
+    contact_urgence: document.getElementById('res-contact-urgence').value || null,
+    tel_urgence: document.getElementById('res-tel-urgence').value || null,
   };
 
   const id = document.getElementById('res-id').value;
@@ -11300,10 +11465,10 @@ async function populateSaisieResidents() {
     if (!lundi) return true;
     // Les NR (appt='NR') sont toujours actifs — pas de notion d'entrée/sortie
     if ((r.appt||'').toUpperCase() === 'NR') return true;
-    // Actif si date_entree <= dimanche ET (pas de date_sortie OU date_sortie >= lundi)
+    // Actif si date_entree <= dimanche ET (pas de date_sortie OU date_sortie + 35j >= lundi)
     const entree = r.date_entree || '0000-01-01';
-    const sortie = r.date_sortie || '9999-12-31';
-    return entree <= dimanche && sortie >= lundi;
+    const sortieLimite = r.date_sortie ? fmtDateISO(addDays(new Date(r.date_sortie), 35)) : '9999-12-31';
+    return entree <= dimanche && sortieLimite >= lundi;
   });
 
   sel.innerHTML = '<option value="">— Choisir un résident —</option>';
@@ -12117,12 +12282,31 @@ async function generateChef() {
 
     document.getElementById('chef-output').innerHTML = html;
 
-    // Sauvegarder d'abord les valeurs existantes
+    // Sauvegarder d'abord les valeurs existantes (session en cours)
     const savedVals = {};
     const oldDiv0 = document.getElementById('chef-infos-inputs');
     if (oldDiv0) {
       oldDiv0.querySelectorAll('input[type=text]').forEach(i => { savedVals[i.id] = i.value; });
       oldDiv0.querySelectorAll('input[type=checkbox]').forEach(i => { savedVals[i.id] = i.checked; });
+    } else {
+      // Pas de saisie en cours : tenter de recharger un snapshot précédemment enregistré pour cette semaine
+      try {
+        const snap = await sbSelect('dl_feuilles_chef', `?maison_id=eq.${currentMaison.id}&lundi=eq.${lundi}&limit=1`);
+        if (snap && snap[0]) {
+          const s = snap[0];
+          savedVals['chef-cb-fruits-non'] = s.fruits_non;
+          savedVals['chef-cb-fruits-oui'] = s.fruits_oui;
+          savedVals['chef-info-fruits'] = s.fruits_texte;
+          savedVals['chef-cb-laitages-non'] = s.laitages_non;
+          savedVals['chef-cb-laitages-oui'] = s.laitages_oui;
+          savedVals['chef-info-laitages'] = s.laitages_texte;
+          savedVals['chef-info-manquants'] = s.manquants;
+          savedVals['chef-info-absences'] = s.absences;
+          savedVals['chef-info-hospit'] = s.hospitalisations;
+          savedVals['chef-info-nouveaux'] = s.nouveaux;
+          savedVals['chef-info-departs'] = s.departs;
+        }
+      } catch(e) { /* silencieux */ }
     }
 
     // Créer dynamiquement la zone de saisie des infos complémentaires
@@ -12130,7 +12314,6 @@ async function generateChef() {
     const INFOS_ROWS = [
       { id:'chef-info-fruits',    label:'Envie de fruits',    val: savedVals['chef-info-fruits']||'' },
       { id:'chef-info-laitages',  label:'Envie de laitages',  val: savedVals['chef-info-laitages']||'' },
-      { id:'chef-info-anniv',     label:'Anniversaire',        val: savedVals['chef-info-anniv'] !== undefined ? savedVals['chef-info-anniv'] : annivPreFill },
       { id:'chef-info-manquants', label:'Manquants',           val: savedVals['chef-info-manquants']||'' },
       { id:'chef-info-absences',  label:'Absences',            val: savedVals['chef-info-absences']||'' },
       { id:'chef-info-hospit',    label:'Hospitalisations',    val: savedVals['chef-info-hospit']||'' },
@@ -12154,14 +12337,11 @@ async function generateChef() {
         <td style="padding:4px 6px;border:1px solid #ccc">${inp('chef-info-laitages', INFOS_ROWS[1].val)}</td>
       </tr>`,
       `<tr>
-        <td rowspan="2" style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px;vertical-align:middle">Anniversaire</td>
+        <td style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px">Anniversaire</td>
         <td colspan="3" style="padding:6px 8px;border:1px solid #ccc;font-size:11px;color:#333;font-style:italic">${annivPreFill || '&nbsp;'}</td>
-      </tr>
-      <tr>
-        <td colspan="3" style="padding:4px 6px;border:1px solid #ccc">${inp('chef-info-anniv', INFOS_ROWS[2].val)}</td>
       </tr>`,
       ...['Manquants','Absences','Hospitalisations','Nouveaux','Départs'].map((label,i) => {
-        const row = INFOS_ROWS[3+i];
+        const row = INFOS_ROWS[2+i];
         return `<tr>
           <td style="padding:6px 8px;background:#F2F3F4;font-weight:600;border:1px solid #ccc;font-size:12px">${label}</td>
           <td colspan="2" style="padding:6px 8px;border:1px solid #ccc"></td>
@@ -12194,7 +12374,7 @@ async function generateChef() {
   }
 }
 
-function printChef() {
+async function printChef() {
   const content = document.getElementById('chef-print-content');
   if (!content) { toast('Générez d\'abord la feuille','error'); return; }
 
@@ -12204,6 +12384,32 @@ function printChef() {
   const getCb   = id => (document.getElementById(id)||{}).checked ? '✓' : '☐';
   const fruitsNon = getCb('chef-cb-fruits-non');   const fruitsOui = getCb('chef-cb-fruits-oui');
   const laitNon   = getCb('chef-cb-laitages-non'); const laitOui   = getCb('chef-cb-laitages-oui');
+
+  // Sauvegarde en base avant impression (upsert sur maison_id + semaine)
+  const chefLundiVal = document.getElementById('chef-lundi').value || '';
+  if (chefLundiVal) {
+    try {
+      const chefSnapshot = {
+        maison_id: currentMaison.id,
+        lundi: chefLundiVal,
+        fruits_non: document.getElementById('chef-cb-fruits-non').checked,
+        fruits_oui: document.getElementById('chef-cb-fruits-oui').checked,
+        fruits_texte: getVal('chef-info-fruits'),
+        laitages_non: document.getElementById('chef-cb-laitages-non').checked,
+        laitages_oui: document.getElementById('chef-cb-laitages-oui').checked,
+        laitages_texte: getVal('chef-info-laitages'),
+        manquants: getVal('chef-info-manquants'),
+        absences: getVal('chef-info-absences'),
+        hospitalisations: getVal('chef-info-hospit'),
+        nouveaux: getVal('chef-info-nouveaux'),
+        departs: getVal('chef-info-departs'),
+        updated_at: new Date().toISOString(),
+      };
+      await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
+    } catch(e) {
+      console.warn('Sauvegarde Feuille Chef échouée:', e.message);
+    }
+  }
   const chefInfosHTML = `
     <div style="margin-top:20px;font-family:Calibri,Arial,sans-serif">
       <div style="font-weight:700;font-size:12px;margin-bottom:8px;border-bottom:2px solid #333;padding-bottom:4px">Informations complémentaires</div>
@@ -12221,11 +12427,8 @@ function printChef() {
           <td style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-laitages')}</td>
         </tr>
         <tr>
-          <td rowspan="2" style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700;vertical-align:middle">Anniversaire</td>
+          <td style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700">Anniversaire</td>
           <td colspan="3" style="padding:5px 7px;border:1px solid #555;color:#555;font-size:10px;font-style:italic">${annivAuto}</td>
-        </tr>
-        <tr>
-          <td colspan="3" style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-anniv')}</td>
         </tr>
         <tr><td style="padding:5px 7px;border:1px solid #555;background:#eee;font-weight:700">Manquants</td>
           <td colspan="3" style="padding:5px 7px;border:1px solid #555">${getVal('chef-info-manquants')}</td></tr>
@@ -12572,7 +12775,7 @@ async function exportResidentsXLSX() {
       'surface','surface_carrez','categorie','nb_residents','revenu_fiscal',
       'plafond_pls','eligible_pls','bailleur_social','loyer','provision_charges',
       'depot_garantie','honoraires_edl','honoraires_loc','date_entree','date_sortie',
-      'date_naissance','num_bail','codif_sepa'
+      'date_naissance','num_bail','codif_sepa','telephone','contact_urgence','tel_urgence'
     ];
 
     const rows = presents.map(r => headers.map(h => {
@@ -12821,14 +13024,14 @@ async function loadReguJour() {
   totalBox.style.display = 'none';
 
   try {
-    // Résidents actifs : date de sortie nulle OU postérieure à la date choisie
+    // Résidents actifs : date de sortie nulle OU + 35 jours postérieure à la date choisie
     const residentsFiltered = allResidents.filter(r => {
       // Les NR sont toujours actifs
       if ((r.appt||'').toUpperCase() === 'NR') return true;
       if (!r.date_entree && !r.date_sortie) return true;
       const entree = r.date_entree || '0000-01-01';
-      const sortie = r.date_sortie || '9999-12-31';
-      return entree <= dateStr && sortie >= dateStr;
+      const sortieLimite = r.date_sortie ? fmtDateISO(addDays(new Date(r.date_sortie), 35)) : '9999-12-31';
+      return entree <= dateStr && sortieLimite >= dateStr;
     });
     const residents = [
       ...residentsFiltered.filter(r => r.nom === 'GARDIEN'),
