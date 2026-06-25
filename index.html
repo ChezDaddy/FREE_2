@@ -333,7 +333,7 @@
     </div>
     <button class="btn-login" onclick="doLogin()">Se connecter</button>
     <div class="login-error" id="login-error">Identifiant ou mot de passe incorrect.</div>
-    <div class="login-version">v0.3 — Juin 2026</div>
+    <div class="login-version">v0.4 — Juin 2026</div>
   </div>
 </div>
 
@@ -565,19 +565,31 @@
         </div>
         <div class="card no-print">
           <div class="btn-group">
-            <div class="form-group" style="position:relative">
-              <label>Semaine</label>
-              <input type="text" id="chef-lundi-display" readonly style="width:160px;cursor:pointer;background:white"
-                     onclick="toggleChefCalendar()" placeholder="Choisir une semaine">
-              <input type="hidden" id="chef-lundi">
-              <div id="chef-calendar-popup" class="week-calendar-popup" style="display:none"></div>
+            <div class="form-group">
+              <label>Année</label>
+              <input type="number" id="chef-annee" style="width:90px" min="2024" max="2035" onchange="onChefSemaineChange()">
             </div>
+            <div class="form-group">
+              <label>Semaine ISO</label>
+              <input type="number" id="chef-semaine-iso" style="width:80px" min="1" max="53" onchange="onChefSemaineChange()">
+            </div>
+            <input type="hidden" id="chef-lundi">
             <button class="btn btn-primary" onclick="generateChef()">Générer</button>
             <button class="btn btn-secondary" onclick="resetChef()">✕ Vider</button>
             <button class="btn btn-secondary" onclick="printChef()">🖨️ Imprimer</button>
           </div>
         </div>
         <div id="chef-output" class="print-doc-wrap"></div>
+
+        <div class="card no-print" style="margin-top:20px">
+          <h3 style="margin-top:0">Feuilles Chef enregistrées</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Semaine</th><th>Lundi</th><th>Dernière modif.</th><th style="width:60px">Actions</th></tr></thead>
+              <tbody id="chef-saved-list"><tr><td colspan="4" style="text-align:center;color:var(--gris-mid);padding:16px">Chargement…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
 
       </div>
 
@@ -2463,105 +2475,74 @@ function resetChef() {
 }
 
 function initChef() {
-  const el = document.getElementById('chef-lundi');
-  if (!el.value) {
-    const monday = getMondayOf(new Date());
-    el.value = fmtDateISO(monday);
-    document.getElementById('chef-lundi-display').value =
-      `${String(monday.getDate()).padStart(2,'0')}/${String(monday.getMonth()+1).padStart(2,'0')}/${monday.getFullYear()} (S${getISOWeek(monday)})`;
+  const today = new Date();
+  if (!document.getElementById('chef-annee').value) {
+    document.getElementById('chef-annee').value = today.getFullYear();
   }
+  if (!document.getElementById('chef-semaine-iso').value) {
+    document.getElementById('chef-semaine-iso').value = getISOWeek(today);
+  }
+  onChefSemaineChange();
   resetChef();
+  loadChefSavedList();
 }
 
-// ========== Calendrier semaine custom — Feuille Chef ==========
-let wcalViewDate = new Date(); // mois affiché dans le calendrier
+// ========== Sélection de semaine — Feuille Chef (méthode robuste : Semaine ISO + Année) ==========
 
-function toggleChefCalendar() {
-  const popup = document.getElementById('chef-calendar-popup');
-  const isOpen = popup.style.display === 'block';
-  if (isOpen) {
-    popup.style.display = 'none';
-  } else {
-    const current = document.getElementById('chef-lundi').value;
-    wcalViewDate = current ? new Date(current + 'T00:00:00') : new Date();
-    renderWeekCalendar();
-    popup.style.display = 'block';
-  }
+function calcLundiFromISO(annee, semaine) {
+  // Méthode fiable déjà utilisée ailleurs dans l'app (Historique, Export CSV)
+  const jan4 = new Date(annee, 0, 4);
+  const mondayW1 = new Date(jan4);
+  mondayW1.setDate(jan4.getDate() - (jan4.getDay()+6)%7);
+  const mondaySem = new Date(mondayW1);
+  mondaySem.setDate(mondayW1.getDate() + (semaine-1)*7);
+  return mondaySem;
 }
 
-function renderWeekCalendar() {
-  const popup = document.getElementById('chef-calendar-popup');
-  const year = wcalViewDate.getFullYear();
-  const month = wcalViewDate.getMonth();
-  const monthLabel = MOIS_LONG[month] + ' ' + year;
+function onChefSemaineChange() {
+  const annee = parseInt(document.getElementById('chef-annee').value);
+  const semaine = parseInt(document.getElementById('chef-semaine-iso').value);
+  if (!annee || !semaine) { document.getElementById('chef-lundi').value = ''; return; }
+  const lundi = calcLundiFromISO(annee, semaine);
+  document.getElementById('chef-lundi').value = fmtDateISO(lundi);
+}
 
-  const firstOfMonth = new Date(year, month, 1);
-  const startMonday = getMondayOf(firstOfMonth);
-
-  const currentLundiVal = document.getElementById('chef-lundi').value;
-
-  let html = `
-    <div class="wcal-header">
-      <button onclick="wcalNavigate(-1)" type="button">‹</button>
-      <span class="wcal-month-label">${monthLabel}</span>
-      <button onclick="wcalNavigate(1)" type="button">›</button>
-    </div>
-    <table class="wcal-grid">
-      <thead><tr><th>lun.</th><th>mar.</th><th>mer.</th><th>jeu.</th><th>ven.</th><th>sam.</th><th>dim.</th></tr></thead>
-      <tbody>`;
-
-  let cursor = new Date(startMonday);
-  // Afficher 6 semaines pour couvrir tout le mois affiché
-  for (let w = 0; w < 6; w++) {
-    const weekMonday = new Date(cursor);
-    const weekMondayStr = fmtDateISO(weekMonday);
-    const isSelected = (weekMondayStr === currentLundiVal);
-    html += `<tr class="wcal-week-row${isSelected?' wcal-selected':''}" onclick="selectChefWeek('${weekMondayStr}')">`;
-    for (let d = 0; d < 7; d++) {
-      const day = addDays(cursor, d);
-      const otherMonth = day.getMonth() !== month;
-      html += `<td class="${otherMonth?'wcal-other-month':''}">${day.getDate()}</td>`;
+async function loadChefSavedList() {
+  const tbody = document.getElementById('chef-saved-list');
+  if (!tbody) return;
+  try {
+    const data = await sbSelect('dl_feuilles_chef', `?maison_id=eq.${currentMaison.id}&order=lundi.desc&limit=30`);
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune feuille enregistrée</td></tr>';
+      return;
     }
-    html += `</tr>`;
-    cursor = addDays(cursor, 7);
-    // Arrêter dès que la semaine suivante commence bien après le mois affiché
-    if (cursor.getMonth() !== month && cursor > firstOfMonth && w >= 4) break;
+    tbody.innerHTML = data.map(f => {
+      const d = new Date(f.lundi + 'T00:00:00');
+      const sem = getISOWeek(d);
+      const lundiFmt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+      const upd = f.updated_at ? new Date(f.updated_at) : null;
+      const updFmt = upd ? `${String(upd.getDate()).padStart(2,'0')}/${String(upd.getMonth()+1).padStart(2,'0')}/${upd.getFullYear()} ${String(upd.getHours()).padStart(2,'0')}:${String(upd.getMinutes()).padStart(2,'0')}` : '—';
+      return `<tr>
+        <td><span class="badge badge-blue">S${sem} ${d.getFullYear()}</span></td>
+        <td>${lundiFmt}</td>
+        <td style="font-size:12px;color:var(--gris-mid)">${updFmt}</td>
+        <td><button class="btn btn-secondary btn-sm" title="Reprendre cette feuille" onclick="reprendreChefFeuille('${f.lundi}')">✏️</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--rouge);padding:16px">Erreur: ${e.message}</td></tr>`;
   }
-
-  html += `</tbody></table>
-    <div class="wcal-footer"><button type="button" onclick="clearChefWeek()">Effacer</button></div>`;
-
-  popup.innerHTML = html;
 }
 
-function wcalNavigate(delta) {
-  wcalViewDate = new Date(wcalViewDate.getFullYear(), wcalViewDate.getMonth() + delta, 1);
-  renderWeekCalendar();
+function reprendreChefFeuille(lundiStr) {
+  const d = new Date(lundiStr + 'T00:00:00');
+  document.getElementById('chef-annee').value = d.getFullYear();
+  document.getElementById('chef-semaine-iso').value = getISOWeek(d);
+  document.getElementById('chef-lundi').value = lundiStr;
+  generateChef();
+  // Scroll vers le haut pour voir la feuille générée
+  document.getElementById('chef-output').scrollIntoView({behavior:'smooth', block:'start'});
 }
-
-function selectChefWeek(mondayStr) {
-  document.getElementById('chef-lundi').value = mondayStr;
-  const d = new Date(mondayStr + 'T00:00:00');
-  document.getElementById('chef-lundi-display').value =
-    `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} (S${getISOWeek(d)})`;
-  document.getElementById('chef-calendar-popup').style.display = 'none';
-}
-
-function clearChefWeek() {
-  document.getElementById('chef-lundi').value = '';
-  document.getElementById('chef-lundi-display').value = '';
-  document.getElementById('chef-calendar-popup').style.display = 'none';
-}
-
-// Fermer le calendrier si on clique en dehors
-document.addEventListener('click', function(e) {
-  const popup = document.getElementById('chef-calendar-popup');
-  const display = document.getElementById('chef-lundi-display');
-  if (!popup || !display) return;
-  if (popup.style.display === 'block' && !popup.contains(e.target) && e.target !== display) {
-    popup.style.display = 'none';
-  }
-});
 
 async function generateChef() {
   const lundi = document.getElementById('chef-lundi').value;
@@ -2837,6 +2818,7 @@ async function printChef() {
         updated_at: new Date().toISOString(),
       };
       await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
+      loadChefSavedList();
     } catch(e) {
       console.warn('Sauvegarde Feuille Chef échouée:', e.message);
     }
@@ -5815,105 +5797,73 @@ function resetChef() {
 }
 
 function initChef() {
-  const el = document.getElementById('chef-lundi');
-  if (!el.value) {
-    const monday = getMondayOf(new Date());
-    el.value = fmtDateISO(monday);
-    document.getElementById('chef-lundi-display').value =
-      `${String(monday.getDate()).padStart(2,'0')}/${String(monday.getMonth()+1).padStart(2,'0')}/${monday.getFullYear()} (S${getISOWeek(monday)})`;
+  const today = new Date();
+  if (!document.getElementById('chef-annee').value) {
+    document.getElementById('chef-annee').value = today.getFullYear();
   }
+  if (!document.getElementById('chef-semaine-iso').value) {
+    document.getElementById('chef-semaine-iso').value = getISOWeek(today);
+  }
+  onChefSemaineChange();
   resetChef();
+  loadChefSavedList();
 }
 
-// ========== Calendrier semaine custom — Feuille Chef ==========
-let wcalViewDate = new Date(); // mois affiché dans le calendrier
+// ========== Sélection de semaine — Feuille Chef (méthode robuste : Semaine ISO + Année) ==========
 
-function toggleChefCalendar() {
-  const popup = document.getElementById('chef-calendar-popup');
-  const isOpen = popup.style.display === 'block';
-  if (isOpen) {
-    popup.style.display = 'none';
-  } else {
-    const current = document.getElementById('chef-lundi').value;
-    wcalViewDate = current ? new Date(current + 'T00:00:00') : new Date();
-    renderWeekCalendar();
-    popup.style.display = 'block';
-  }
+function calcLundiFromISO(annee, semaine) {
+  // Méthode fiable déjà utilisée ailleurs dans l'app (Historique, Export CSV)
+  const jan4 = new Date(annee, 0, 4);
+  const mondayW1 = new Date(jan4);
+  mondayW1.setDate(jan4.getDate() - (jan4.getDay()+6)%7);
+  const mondaySem = new Date(mondayW1);
+  mondaySem.setDate(mondayW1.getDate() + (semaine-1)*7);
+  return mondaySem;
 }
 
-function renderWeekCalendar() {
-  const popup = document.getElementById('chef-calendar-popup');
-  const year = wcalViewDate.getFullYear();
-  const month = wcalViewDate.getMonth();
-  const monthLabel = MOIS_LONG[month] + ' ' + year;
+function onChefSemaineChange() {
+  const annee = parseInt(document.getElementById('chef-annee').value);
+  const semaine = parseInt(document.getElementById('chef-semaine-iso').value);
+  if (!annee || !semaine) { document.getElementById('chef-lundi').value = ''; return; }
+  const lundi = calcLundiFromISO(annee, semaine);
+  document.getElementById('chef-lundi').value = fmtDateISO(lundi);
+}
 
-  const firstOfMonth = new Date(year, month, 1);
-  const startMonday = getMondayOf(firstOfMonth);
-
-  const currentLundiVal = document.getElementById('chef-lundi').value;
-
-  let html = `
-    <div class="wcal-header">
-      <button onclick="wcalNavigate(-1)" type="button">‹</button>
-      <span class="wcal-month-label">${monthLabel}</span>
-      <button onclick="wcalNavigate(1)" type="button">›</button>
-    </div>
-    <table class="wcal-grid">
-      <thead><tr><th>lun.</th><th>mar.</th><th>mer.</th><th>jeu.</th><th>ven.</th><th>sam.</th><th>dim.</th></tr></thead>
-      <tbody>`;
-
-  let cursor = new Date(startMonday);
-  // Afficher 6 semaines pour couvrir tout le mois affiché
-  for (let w = 0; w < 6; w++) {
-    const weekMonday = new Date(cursor);
-    const weekMondayStr = fmtDateISO(weekMonday);
-    const isSelected = (weekMondayStr === currentLundiVal);
-    html += `<tr class="wcal-week-row${isSelected?' wcal-selected':''}" onclick="selectChefWeek('${weekMondayStr}')">`;
-    for (let d = 0; d < 7; d++) {
-      const day = addDays(cursor, d);
-      const otherMonth = day.getMonth() !== month;
-      html += `<td class="${otherMonth?'wcal-other-month':''}">${day.getDate()}</td>`;
+async function loadChefSavedList() {
+  const tbody = document.getElementById('chef-saved-list');
+  if (!tbody) return;
+  try {
+    const data = await sbSelect('dl_feuilles_chef', `?maison_id=eq.${currentMaison.id}&order=lundi.desc&limit=30`);
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune feuille enregistrée</td></tr>';
+      return;
     }
-    html += `</tr>`;
-    cursor = addDays(cursor, 7);
-    // Arrêter dès que la semaine suivante commence bien après le mois affiché
-    if (cursor.getMonth() !== month && cursor > firstOfMonth && w >= 4) break;
+    tbody.innerHTML = data.map(f => {
+      const d = new Date(f.lundi + 'T00:00:00');
+      const sem = getISOWeek(d);
+      const lundiFmt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+      const upd = f.updated_at ? new Date(f.updated_at) : null;
+      const updFmt = upd ? `${String(upd.getDate()).padStart(2,'0')}/${String(upd.getMonth()+1).padStart(2,'0')}/${upd.getFullYear()} ${String(upd.getHours()).padStart(2,'0')}:${String(upd.getMinutes()).padStart(2,'0')}` : '—';
+      return `<tr>
+        <td><span class="badge badge-blue">S${sem} ${d.getFullYear()}</span></td>
+        <td>${lundiFmt}</td>
+        <td style="font-size:12px;color:var(--gris-mid)">${updFmt}</td>
+        <td><button class="btn btn-secondary btn-sm" title="Reprendre cette feuille" onclick="reprendreChefFeuille('${f.lundi}')">✏️</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--rouge);padding:16px">Erreur: ${e.message}</td></tr>`;
   }
-
-  html += `</tbody></table>
-    <div class="wcal-footer"><button type="button" onclick="clearChefWeek()">Effacer</button></div>`;
-
-  popup.innerHTML = html;
 }
 
-function wcalNavigate(delta) {
-  wcalViewDate = new Date(wcalViewDate.getFullYear(), wcalViewDate.getMonth() + delta, 1);
-  renderWeekCalendar();
+function reprendreChefFeuille(lundiStr) {
+  const d = new Date(lundiStr + 'T00:00:00');
+  document.getElementById('chef-annee').value = d.getFullYear();
+  document.getElementById('chef-semaine-iso').value = getISOWeek(d);
+  document.getElementById('chef-lundi').value = lundiStr;
+  generateChef();
+  document.getElementById('chef-output').scrollIntoView({behavior:'smooth', block:'start'});
 }
-
-function selectChefWeek(mondayStr) {
-  document.getElementById('chef-lundi').value = mondayStr;
-  const d = new Date(mondayStr + 'T00:00:00');
-  document.getElementById('chef-lundi-display').value =
-    `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} (S${getISOWeek(d)})`;
-  document.getElementById('chef-calendar-popup').style.display = 'none';
-}
-
-function clearChefWeek() {
-  document.getElementById('chef-lundi').value = '';
-  document.getElementById('chef-lundi-display').value = '';
-  document.getElementById('chef-calendar-popup').style.display = 'none';
-}
-
-// Fermer le calendrier si on clique en dehors
-document.addEventListener('click', function(e) {
-  const popup = document.getElementById('chef-calendar-popup');
-  const display = document.getElementById('chef-lundi-display');
-  if (!popup || !display) return;
-  if (popup.style.display === 'block' && !popup.contains(e.target) && e.target !== display) {
-    popup.style.display = 'none';
-  }
-});
 
 async function generateChef() {
   const lundi = document.getElementById('chef-lundi').value;
@@ -6189,6 +6139,7 @@ async function printChef() {
         updated_at: new Date().toISOString(),
       };
       await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
+      loadChefSavedList();
     } catch(e) {
       console.warn('Sauvegarde Feuille Chef échouée:', e.message);
     }
@@ -9167,105 +9118,73 @@ function resetChef() {
 }
 
 function initChef() {
-  const el = document.getElementById('chef-lundi');
-  if (!el.value) {
-    const monday = getMondayOf(new Date());
-    el.value = fmtDateISO(monday);
-    document.getElementById('chef-lundi-display').value =
-      `${String(monday.getDate()).padStart(2,'0')}/${String(monday.getMonth()+1).padStart(2,'0')}/${monday.getFullYear()} (S${getISOWeek(monday)})`;
+  const today = new Date();
+  if (!document.getElementById('chef-annee').value) {
+    document.getElementById('chef-annee').value = today.getFullYear();
   }
+  if (!document.getElementById('chef-semaine-iso').value) {
+    document.getElementById('chef-semaine-iso').value = getISOWeek(today);
+  }
+  onChefSemaineChange();
   resetChef();
+  loadChefSavedList();
 }
 
-// ========== Calendrier semaine custom — Feuille Chef ==========
-let wcalViewDate = new Date(); // mois affiché dans le calendrier
+// ========== Sélection de semaine — Feuille Chef (méthode robuste : Semaine ISO + Année) ==========
 
-function toggleChefCalendar() {
-  const popup = document.getElementById('chef-calendar-popup');
-  const isOpen = popup.style.display === 'block';
-  if (isOpen) {
-    popup.style.display = 'none';
-  } else {
-    const current = document.getElementById('chef-lundi').value;
-    wcalViewDate = current ? new Date(current + 'T00:00:00') : new Date();
-    renderWeekCalendar();
-    popup.style.display = 'block';
-  }
+function calcLundiFromISO(annee, semaine) {
+  // Méthode fiable déjà utilisée ailleurs dans l'app (Historique, Export CSV)
+  const jan4 = new Date(annee, 0, 4);
+  const mondayW1 = new Date(jan4);
+  mondayW1.setDate(jan4.getDate() - (jan4.getDay()+6)%7);
+  const mondaySem = new Date(mondayW1);
+  mondaySem.setDate(mondayW1.getDate() + (semaine-1)*7);
+  return mondaySem;
 }
 
-function renderWeekCalendar() {
-  const popup = document.getElementById('chef-calendar-popup');
-  const year = wcalViewDate.getFullYear();
-  const month = wcalViewDate.getMonth();
-  const monthLabel = MOIS_LONG[month] + ' ' + year;
+function onChefSemaineChange() {
+  const annee = parseInt(document.getElementById('chef-annee').value);
+  const semaine = parseInt(document.getElementById('chef-semaine-iso').value);
+  if (!annee || !semaine) { document.getElementById('chef-lundi').value = ''; return; }
+  const lundi = calcLundiFromISO(annee, semaine);
+  document.getElementById('chef-lundi').value = fmtDateISO(lundi);
+}
 
-  const firstOfMonth = new Date(year, month, 1);
-  const startMonday = getMondayOf(firstOfMonth);
-
-  const currentLundiVal = document.getElementById('chef-lundi').value;
-
-  let html = `
-    <div class="wcal-header">
-      <button onclick="wcalNavigate(-1)" type="button">‹</button>
-      <span class="wcal-month-label">${monthLabel}</span>
-      <button onclick="wcalNavigate(1)" type="button">›</button>
-    </div>
-    <table class="wcal-grid">
-      <thead><tr><th>lun.</th><th>mar.</th><th>mer.</th><th>jeu.</th><th>ven.</th><th>sam.</th><th>dim.</th></tr></thead>
-      <tbody>`;
-
-  let cursor = new Date(startMonday);
-  // Afficher 6 semaines pour couvrir tout le mois affiché
-  for (let w = 0; w < 6; w++) {
-    const weekMonday = new Date(cursor);
-    const weekMondayStr = fmtDateISO(weekMonday);
-    const isSelected = (weekMondayStr === currentLundiVal);
-    html += `<tr class="wcal-week-row${isSelected?' wcal-selected':''}" onclick="selectChefWeek('${weekMondayStr}')">`;
-    for (let d = 0; d < 7; d++) {
-      const day = addDays(cursor, d);
-      const otherMonth = day.getMonth() !== month;
-      html += `<td class="${otherMonth?'wcal-other-month':''}">${day.getDate()}</td>`;
+async function loadChefSavedList() {
+  const tbody = document.getElementById('chef-saved-list');
+  if (!tbody) return;
+  try {
+    const data = await sbSelect('dl_feuilles_chef', `?maison_id=eq.${currentMaison.id}&order=lundi.desc&limit=30`);
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune feuille enregistrée</td></tr>';
+      return;
     }
-    html += `</tr>`;
-    cursor = addDays(cursor, 7);
-    // Arrêter dès que la semaine suivante commence bien après le mois affiché
-    if (cursor.getMonth() !== month && cursor > firstOfMonth && w >= 4) break;
+    tbody.innerHTML = data.map(f => {
+      const d = new Date(f.lundi + 'T00:00:00');
+      const sem = getISOWeek(d);
+      const lundiFmt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+      const upd = f.updated_at ? new Date(f.updated_at) : null;
+      const updFmt = upd ? `${String(upd.getDate()).padStart(2,'0')}/${String(upd.getMonth()+1).padStart(2,'0')}/${upd.getFullYear()} ${String(upd.getHours()).padStart(2,'0')}:${String(upd.getMinutes()).padStart(2,'0')}` : '—';
+      return `<tr>
+        <td><span class="badge badge-blue">S${sem} ${d.getFullYear()}</span></td>
+        <td>${lundiFmt}</td>
+        <td style="font-size:12px;color:var(--gris-mid)">${updFmt}</td>
+        <td><button class="btn btn-secondary btn-sm" title="Reprendre cette feuille" onclick="reprendreChefFeuille('${f.lundi}')">✏️</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--rouge);padding:16px">Erreur: ${e.message}</td></tr>`;
   }
-
-  html += `</tbody></table>
-    <div class="wcal-footer"><button type="button" onclick="clearChefWeek()">Effacer</button></div>`;
-
-  popup.innerHTML = html;
 }
 
-function wcalNavigate(delta) {
-  wcalViewDate = new Date(wcalViewDate.getFullYear(), wcalViewDate.getMonth() + delta, 1);
-  renderWeekCalendar();
+function reprendreChefFeuille(lundiStr) {
+  const d = new Date(lundiStr + 'T00:00:00');
+  document.getElementById('chef-annee').value = d.getFullYear();
+  document.getElementById('chef-semaine-iso').value = getISOWeek(d);
+  document.getElementById('chef-lundi').value = lundiStr;
+  generateChef();
+  document.getElementById('chef-output').scrollIntoView({behavior:'smooth', block:'start'});
 }
-
-function selectChefWeek(mondayStr) {
-  document.getElementById('chef-lundi').value = mondayStr;
-  const d = new Date(mondayStr + 'T00:00:00');
-  document.getElementById('chef-lundi-display').value =
-    `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} (S${getISOWeek(d)})`;
-  document.getElementById('chef-calendar-popup').style.display = 'none';
-}
-
-function clearChefWeek() {
-  document.getElementById('chef-lundi').value = '';
-  document.getElementById('chef-lundi-display').value = '';
-  document.getElementById('chef-calendar-popup').style.display = 'none';
-}
-
-// Fermer le calendrier si on clique en dehors
-document.addEventListener('click', function(e) {
-  const popup = document.getElementById('chef-calendar-popup');
-  const display = document.getElementById('chef-lundi-display');
-  if (!popup || !display) return;
-  if (popup.style.display === 'block' && !popup.contains(e.target) && e.target !== display) {
-    popup.style.display = 'none';
-  }
-});
 
 async function generateChef() {
   const lundi = document.getElementById('chef-lundi').value;
@@ -9541,6 +9460,7 @@ async function printChef() {
         updated_at: new Date().toISOString(),
       };
       await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
+      loadChefSavedList();
     } catch(e) {
       console.warn('Sauvegarde Feuille Chef échouée:', e.message);
     }
@@ -12519,105 +12439,73 @@ function resetChef() {
 }
 
 function initChef() {
-  const el = document.getElementById('chef-lundi');
-  if (!el.value) {
-    const monday = getMondayOf(new Date());
-    el.value = fmtDateISO(monday);
-    document.getElementById('chef-lundi-display').value =
-      `${String(monday.getDate()).padStart(2,'0')}/${String(monday.getMonth()+1).padStart(2,'0')}/${monday.getFullYear()} (S${getISOWeek(monday)})`;
+  const today = new Date();
+  if (!document.getElementById('chef-annee').value) {
+    document.getElementById('chef-annee').value = today.getFullYear();
   }
+  if (!document.getElementById('chef-semaine-iso').value) {
+    document.getElementById('chef-semaine-iso').value = getISOWeek(today);
+  }
+  onChefSemaineChange();
   resetChef();
+  loadChefSavedList();
 }
 
-// ========== Calendrier semaine custom — Feuille Chef ==========
-let wcalViewDate = new Date(); // mois affiché dans le calendrier
+// ========== Sélection de semaine — Feuille Chef (méthode robuste : Semaine ISO + Année) ==========
 
-function toggleChefCalendar() {
-  const popup = document.getElementById('chef-calendar-popup');
-  const isOpen = popup.style.display === 'block';
-  if (isOpen) {
-    popup.style.display = 'none';
-  } else {
-    const current = document.getElementById('chef-lundi').value;
-    wcalViewDate = current ? new Date(current + 'T00:00:00') : new Date();
-    renderWeekCalendar();
-    popup.style.display = 'block';
-  }
+function calcLundiFromISO(annee, semaine) {
+  // Méthode fiable déjà utilisée ailleurs dans l'app (Historique, Export CSV)
+  const jan4 = new Date(annee, 0, 4);
+  const mondayW1 = new Date(jan4);
+  mondayW1.setDate(jan4.getDate() - (jan4.getDay()+6)%7);
+  const mondaySem = new Date(mondayW1);
+  mondaySem.setDate(mondayW1.getDate() + (semaine-1)*7);
+  return mondaySem;
 }
 
-function renderWeekCalendar() {
-  const popup = document.getElementById('chef-calendar-popup');
-  const year = wcalViewDate.getFullYear();
-  const month = wcalViewDate.getMonth();
-  const monthLabel = MOIS_LONG[month] + ' ' + year;
+function onChefSemaineChange() {
+  const annee = parseInt(document.getElementById('chef-annee').value);
+  const semaine = parseInt(document.getElementById('chef-semaine-iso').value);
+  if (!annee || !semaine) { document.getElementById('chef-lundi').value = ''; return; }
+  const lundi = calcLundiFromISO(annee, semaine);
+  document.getElementById('chef-lundi').value = fmtDateISO(lundi);
+}
 
-  const firstOfMonth = new Date(year, month, 1);
-  const startMonday = getMondayOf(firstOfMonth);
-
-  const currentLundiVal = document.getElementById('chef-lundi').value;
-
-  let html = `
-    <div class="wcal-header">
-      <button onclick="wcalNavigate(-1)" type="button">‹</button>
-      <span class="wcal-month-label">${monthLabel}</span>
-      <button onclick="wcalNavigate(1)" type="button">›</button>
-    </div>
-    <table class="wcal-grid">
-      <thead><tr><th>lun.</th><th>mar.</th><th>mer.</th><th>jeu.</th><th>ven.</th><th>sam.</th><th>dim.</th></tr></thead>
-      <tbody>`;
-
-  let cursor = new Date(startMonday);
-  // Afficher 6 semaines pour couvrir tout le mois affiché
-  for (let w = 0; w < 6; w++) {
-    const weekMonday = new Date(cursor);
-    const weekMondayStr = fmtDateISO(weekMonday);
-    const isSelected = (weekMondayStr === currentLundiVal);
-    html += `<tr class="wcal-week-row${isSelected?' wcal-selected':''}" onclick="selectChefWeek('${weekMondayStr}')">`;
-    for (let d = 0; d < 7; d++) {
-      const day = addDays(cursor, d);
-      const otherMonth = day.getMonth() !== month;
-      html += `<td class="${otherMonth?'wcal-other-month':''}">${day.getDate()}</td>`;
+async function loadChefSavedList() {
+  const tbody = document.getElementById('chef-saved-list');
+  if (!tbody) return;
+  try {
+    const data = await sbSelect('dl_feuilles_chef', `?maison_id=eq.${currentMaison.id}&order=lundi.desc&limit=30`);
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune feuille enregistrée</td></tr>';
+      return;
     }
-    html += `</tr>`;
-    cursor = addDays(cursor, 7);
-    // Arrêter dès que la semaine suivante commence bien après le mois affiché
-    if (cursor.getMonth() !== month && cursor > firstOfMonth && w >= 4) break;
+    tbody.innerHTML = data.map(f => {
+      const d = new Date(f.lundi + 'T00:00:00');
+      const sem = getISOWeek(d);
+      const lundiFmt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+      const upd = f.updated_at ? new Date(f.updated_at) : null;
+      const updFmt = upd ? `${String(upd.getDate()).padStart(2,'0')}/${String(upd.getMonth()+1).padStart(2,'0')}/${upd.getFullYear()} ${String(upd.getHours()).padStart(2,'0')}:${String(upd.getMinutes()).padStart(2,'0')}` : '—';
+      return `<tr>
+        <td><span class="badge badge-blue">S${sem} ${d.getFullYear()}</span></td>
+        <td>${lundiFmt}</td>
+        <td style="font-size:12px;color:var(--gris-mid)">${updFmt}</td>
+        <td><button class="btn btn-secondary btn-sm" title="Reprendre cette feuille" onclick="reprendreChefFeuille('${f.lundi}')">✏️</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--rouge);padding:16px">Erreur: ${e.message}</td></tr>`;
   }
-
-  html += `</tbody></table>
-    <div class="wcal-footer"><button type="button" onclick="clearChefWeek()">Effacer</button></div>`;
-
-  popup.innerHTML = html;
 }
 
-function wcalNavigate(delta) {
-  wcalViewDate = new Date(wcalViewDate.getFullYear(), wcalViewDate.getMonth() + delta, 1);
-  renderWeekCalendar();
+function reprendreChefFeuille(lundiStr) {
+  const d = new Date(lundiStr + 'T00:00:00');
+  document.getElementById('chef-annee').value = d.getFullYear();
+  document.getElementById('chef-semaine-iso').value = getISOWeek(d);
+  document.getElementById('chef-lundi').value = lundiStr;
+  generateChef();
+  document.getElementById('chef-output').scrollIntoView({behavior:'smooth', block:'start'});
 }
-
-function selectChefWeek(mondayStr) {
-  document.getElementById('chef-lundi').value = mondayStr;
-  const d = new Date(mondayStr + 'T00:00:00');
-  document.getElementById('chef-lundi-display').value =
-    `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} (S${getISOWeek(d)})`;
-  document.getElementById('chef-calendar-popup').style.display = 'none';
-}
-
-function clearChefWeek() {
-  document.getElementById('chef-lundi').value = '';
-  document.getElementById('chef-lundi-display').value = '';
-  document.getElementById('chef-calendar-popup').style.display = 'none';
-}
-
-// Fermer le calendrier si on clique en dehors
-document.addEventListener('click', function(e) {
-  const popup = document.getElementById('chef-calendar-popup');
-  const display = document.getElementById('chef-lundi-display');
-  if (!popup || !display) return;
-  if (popup.style.display === 'block' && !popup.contains(e.target) && e.target !== display) {
-    popup.style.display = 'none';
-  }
-});
 
 async function generateChef() {
   const lundi = document.getElementById('chef-lundi').value;
@@ -12893,6 +12781,7 @@ async function printChef() {
         updated_at: new Date().toISOString(),
       };
       await sbUpsert('dl_feuilles_chef', chefSnapshot, 'maison_id,lundi');
+      loadChefSavedList();
     } catch(e) {
       console.warn('Sauvegarde Feuille Chef échouée:', e.message);
     }
