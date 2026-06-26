@@ -1423,9 +1423,8 @@ async function populateFactResidents() {
     optGroup.label = 'Appartements vacants (aucun résident actif)';
     for (const appt of apptsVacants) {
       const opt = document.createElement('option');
-      opt.value = '';
-      opt.disabled = true;
-      opt.textContent = `Appt. ${appt} — vacant`;
+      opt.value = `vacant:${appt}`;
+      opt.textContent = `Appt. ${appt} — Vacant`;
       optGroup.appendChild(opt);
     }
     sel.appendChild(optGroup);
@@ -1453,7 +1452,12 @@ function populateFactMois() {
 
 function onFactResidentChange() {
   const id = document.getElementById('fact-resident').value;
-  factCurrentResident = allResidents.find(r => r.id == id) || null;
+  if (id.startsWith('vacant:')) {
+    const appt = id.slice(7);
+    factCurrentResident = { id, nom:'VACANT', prenom:'', appt, nb_residents:1, categorie:null, date_entree:null, date_sortie:null, _vacant:true };
+  } else {
+    factCurrentResident = allResidents.find(r => r.id == id) || null;
+  }
   loadFactSavedList();
 }
 
@@ -1594,11 +1598,92 @@ function fmtDateFr(d) {
   return `${String(dt.getDate()).padStart(2,'0')} ${MOIS_LONG[dt.getMonth()]} ${dt.getFullYear()}`;
 }
 
+async function genererFactureVacant(appt, mois) {
+  const nouvelleCle = `vacant:${appt}-${mois}`;
+  factCurrentResident = { id: `vacant:${appt}`, nom: 'VACANT', prenom: '', appt, nb_residents: 1, categorie: null, date_entree: null, date_sortie: null, _vacant: true };
+  factCurrentMois = mois;
+  factLastKey = nouvelleCle;
+  factEvenements = [];
+  factJoursAmeliore = [];
+
+  const [annee, moisNum] = mois.split('-').map(Number);
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  const tarifPrestaBase = await getTarifCarte('Résidents_Adhésion mensuelle Individuel', mois);
+  const prestaBaseTTC = tarifPrestaBase ? parseFloat(tarifPrestaBase.prix1) : 0;
+
+  factLastCalc = {
+    totaux: { totRepasSalle:0, totRepasInvite:0, totPlateauPorte:0, totPlateauEmporte:0, totPotage:0, totBoisson:0, nbRepasAmeliore:0, nbTotalRepas:0 },
+    tarifs: { prixN1:0, prixN2:0, tvaRepas:0, prixPortage:0, tarifInviteTTC:null, tarifPotageTTC:null },
+    montants: { repasSalleHT:0, repasInviteHT:0, plateauPorteHT:0, ameliorHT:0, potageHT:0 },
+    loyer: { ht:0, prorataQte:1 },
+    charges: { ht:0, prorataQte:1 },
+    prestaBase: { ttc: prestaBaseTTC, qte: 1, libelle: 'Résidents_Adhésion mensuelle Individuel', tarif: tarifPrestaBase },
+    cotisationRestaurant: { ttc:0, totalPourSeuilR:0, tarif:null },
+    adhesionAnnuelle: { ttc:0, qte:0, tarif:null },
+  };
+
+  const html = `<div class="print-doc" id="fact-print-content">
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px;background:#fafafa">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Mois :</strong> <span style="color:#c0392b">${moisLabel}</span></div>
+          <div><strong>Résident :</strong> <span style="color:#c0392b">VACANT</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Appt. :</strong> <span style="color:#2980b9">${appt}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:16px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:10px">Services</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px" class="fact-table-droite">
+        <thead>
+          <tr style="background:#333;color:white">
+            <th style="padding:5px;text-align:left">Services</th>
+            <th style="padding:5px">PU TTC</th>
+            <th style="padding:5px">Qté</th>
+            <th style="padding:5px">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#fff8dc">
+            <td>Adhésion mensuelle Individuel</td>
+            <td style="text-align:right">${fmt2(prestaBaseTTC)}€</td>
+            <td style="text-align:center">1</td>
+            <td style="text-align:right;font-weight:600">${fmt2(prestaBaseTTC)}€</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:700;background:#333;color:white">
+            <td colspan="3" style="text-align:right;padding:8px">Montant total à payer :</td>
+            <td id="fact-montant-total" style="text-align:right;padding:8px">${fmt2(prestaBaseTTC)}€</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div style="margin-top:12px">
+      <label style="font-size:13px;font-weight:600">Commentaires</label>
+      <textarea id="fact-commentaires" rows="2" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gris-clair);border-radius:6px;font-family:inherit;font-size:12px"></textarea>
+    </div>
+  </div>`;
+
+  document.getElementById('fact-output').innerHTML = html;
+}
+
+
 async function genererFacture() {
   const resId = document.getElementById('fact-resident').value;
   const mois  = document.getElementById('fact-mois').value;
   if (!resId) { toast('Veuillez choisir un résident','error'); return; }
   if (!mois)  { toast('Veuillez choisir un mois','error'); return; }
+
+  // Cas particulier : appartement vacant (valeur au format "vacant:{appt}")
+  if (resId.startsWith('vacant:')) {
+    return genererFactureVacant(resId.slice(7), mois);
+  }
 
   const res = allResidents.find(r => r.id == resId);
   if (!res) { toast('Résident introuvable','error'); return; }
@@ -2193,8 +2278,11 @@ async function loadFactSavedList() {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Sélectionnez un résident pour voir ses factures</td></tr>';
     return;
   }
+  const filtreListe = resId.startsWith('vacant:')
+    ? `appt_vacant=eq.${resId.slice(7)}`
+    : `resident_id=eq.${resId}`;
   try {
-    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&order=mois.desc&limit=30`);
+    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&${filtreListe}&order=mois.desc&limit=30`);
     if (!data.length) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune facture enregistrée pour ce résident</td></tr>';
       return;
@@ -2230,9 +2318,12 @@ async function genererNumeroFacture(res, mois) {
   const base = `${currentMaison.id}-${res.appt}-${annee}${moisNum}`;
   // Rang = 1 par défaut, incrémenté uniquement si plusieurs factures distinctes existent déjà pour ce résident+mois
   // (cas rare : facture complémentaire). On vérifie l'existant pour déterminer le bon rang.
+  const filtreResident = res._vacant
+    ? `appt_vacant=eq.${res.appt}`
+    : `resident_id=eq.${res.id}`;
   try {
     const existantes = await sbSelect('dl_factures',
-      `?maison_id=eq.${currentMaison.id}&resident_id=eq.${res.id}&mois=eq.${mois}&order=numero.desc`);
+      `?maison_id=eq.${currentMaison.id}&${filtreResident}&mois=eq.${mois}&order=numero.desc`);
     if (!existantes || !existantes.length) return base + '1';
     // Une facture existe déjà pour ce mois — on garde son numéro (la modification ne change pas le numéro)
     return existantes[0].numero;
@@ -2247,11 +2338,14 @@ async function sauvegarderFacture() {
   }
   const res = factCurrentResident;
   const mois = factCurrentMois;
+  const filtreResident = res._vacant
+    ? `appt_vacant=eq.${res.appt}`
+    : `resident_id=eq.${res.id}`;
 
   try {
     // Vérifier si une facture existe déjà pour ce résident+mois (pour conserver son numéro et son id)
     const existantes = await sbSelect('dl_factures',
-      `?maison_id=eq.${currentMaison.id}&resident_id=eq.${res.id}&mois=eq.${mois}&order=numero.desc&limit=1`);
+      `?maison_id=eq.${currentMaison.id}&${filtreResident}&mois=eq.${mois}&order=numero.desc&limit=1`);
     const existante = (existantes && existantes.length) ? existantes[0] : null;
 
     const numero = existante ? existante.numero : await genererNumeroFacture(res, mois);
@@ -2261,7 +2355,7 @@ async function sauvegarderFacture() {
     const contenu = {
       resident: { id: res.id, nom: res.nom, prenom: res.prenom, appt: res.appt,
                   nb_residents: res.nb_residents, categorie: res.categorie,
-                  date_entree: res.date_entree, date_sortie: res.date_sortie },
+                  date_entree: res.date_entree, date_sortie: res.date_sortie, _vacant: !!res._vacant },
       mois,
       evenements: factEvenements,
       joursAmeliore: factJoursAmeliore,
@@ -2271,7 +2365,8 @@ async function sauvegarderFacture() {
 
     const payload = {
       maison_id: currentMaison.id,
-      resident_id: res.id,
+      resident_id: res._vacant ? null : res.id,
+      appt_vacant: res._vacant ? res.appt : null,
       numero,
       mois,
       contenu,
@@ -2315,14 +2410,20 @@ async function reprendreFacture(factureId) {
     if (!data || !data.length) { toast('Facture introuvable','error'); return; }
     const f = data[0];
     const c = f.contenu;
+    const estVacant = !!f.appt_vacant || !!(c && c.resident && c.resident._vacant);
 
     // Repositionner les sélecteurs résident + mois
-    document.getElementById('fact-resident').value = f.resident_id;
+    document.getElementById('fact-resident').value = estVacant ? `vacant:${f.appt_vacant}` : f.resident_id;
     document.getElementById('fact-mois').value = f.mois;
 
-    factCurrentResident = allResidents.find(r => r.id == f.resident_id) || c.resident;
+    if (estVacant) {
+      factCurrentResident = { id: `vacant:${f.appt_vacant}`, nom:'VACANT', prenom:'', appt: f.appt_vacant, nb_residents:1, categorie:null, date_entree:null, date_sortie:null, _vacant:true };
+      factLastKey = `vacant:${f.appt_vacant}-${f.mois}`;
+    } else {
+      factCurrentResident = allResidents.find(r => r.id == f.resident_id) || c.resident;
+      factLastKey = `${f.resident_id}-${f.mois}`;
+    }
     factCurrentMois = f.mois;
-    factLastKey = `${f.resident_id}-${f.mois}`;
     factEvenements = c.evenements || [];
     factJoursAmeliore = c.joursAmeliore || [];
 
@@ -5884,9 +5985,8 @@ async function populateFactResidents() {
     optGroup.label = 'Appartements vacants (aucun résident actif)';
     for (const appt of apptsVacants) {
       const opt = document.createElement('option');
-      opt.value = '';
-      opt.disabled = true;
-      opt.textContent = `Appt. ${appt} — vacant`;
+      opt.value = `vacant:${appt}`;
+      opt.textContent = `Appt. ${appt} — Vacant`;
       optGroup.appendChild(opt);
     }
     sel.appendChild(optGroup);
@@ -5914,7 +6014,12 @@ function populateFactMois() {
 
 function onFactResidentChange() {
   const id = document.getElementById('fact-resident').value;
-  factCurrentResident = allResidents.find(r => r.id == id) || null;
+  if (id.startsWith('vacant:')) {
+    const appt = id.slice(7);
+    factCurrentResident = { id, nom:'VACANT', prenom:'', appt, nb_residents:1, categorie:null, date_entree:null, date_sortie:null, _vacant:true };
+  } else {
+    factCurrentResident = allResidents.find(r => r.id == id) || null;
+  }
   loadFactSavedList();
 }
 
@@ -6055,11 +6160,92 @@ function fmtDateFr(d) {
   return `${String(dt.getDate()).padStart(2,'0')} ${MOIS_LONG[dt.getMonth()]} ${dt.getFullYear()}`;
 }
 
+async function genererFactureVacant(appt, mois) {
+  const nouvelleCle = `vacant:${appt}-${mois}`;
+  factCurrentResident = { id: `vacant:${appt}`, nom: 'VACANT', prenom: '', appt, nb_residents: 1, categorie: null, date_entree: null, date_sortie: null, _vacant: true };
+  factCurrentMois = mois;
+  factLastKey = nouvelleCle;
+  factEvenements = [];
+  factJoursAmeliore = [];
+
+  const [annee, moisNum] = mois.split('-').map(Number);
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  const tarifPrestaBase = await getTarifCarte('Résidents_Adhésion mensuelle Individuel', mois);
+  const prestaBaseTTC = tarifPrestaBase ? parseFloat(tarifPrestaBase.prix1) : 0;
+
+  factLastCalc = {
+    totaux: { totRepasSalle:0, totRepasInvite:0, totPlateauPorte:0, totPlateauEmporte:0, totPotage:0, totBoisson:0, nbRepasAmeliore:0, nbTotalRepas:0 },
+    tarifs: { prixN1:0, prixN2:0, tvaRepas:0, prixPortage:0, tarifInviteTTC:null, tarifPotageTTC:null },
+    montants: { repasSalleHT:0, repasInviteHT:0, plateauPorteHT:0, ameliorHT:0, potageHT:0 },
+    loyer: { ht:0, prorataQte:1 },
+    charges: { ht:0, prorataQte:1 },
+    prestaBase: { ttc: prestaBaseTTC, qte: 1, libelle: 'Résidents_Adhésion mensuelle Individuel', tarif: tarifPrestaBase },
+    cotisationRestaurant: { ttc:0, totalPourSeuilR:0, tarif:null },
+    adhesionAnnuelle: { ttc:0, qte:0, tarif:null },
+  };
+
+  const html = `<div class="print-doc" id="fact-print-content">
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px;background:#fafafa">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Mois :</strong> <span style="color:#c0392b">${moisLabel}</span></div>
+          <div><strong>Résident :</strong> <span style="color:#c0392b">VACANT</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Appt. :</strong> <span style="color:#2980b9">${appt}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:16px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:10px">Services</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px" class="fact-table-droite">
+        <thead>
+          <tr style="background:#333;color:white">
+            <th style="padding:5px;text-align:left">Services</th>
+            <th style="padding:5px">PU TTC</th>
+            <th style="padding:5px">Qté</th>
+            <th style="padding:5px">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#fff8dc">
+            <td>Adhésion mensuelle Individuel</td>
+            <td style="text-align:right">${fmt2(prestaBaseTTC)}€</td>
+            <td style="text-align:center">1</td>
+            <td style="text-align:right;font-weight:600">${fmt2(prestaBaseTTC)}€</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:700;background:#333;color:white">
+            <td colspan="3" style="text-align:right;padding:8px">Montant total à payer :</td>
+            <td id="fact-montant-total" style="text-align:right;padding:8px">${fmt2(prestaBaseTTC)}€</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div style="margin-top:12px">
+      <label style="font-size:13px;font-weight:600">Commentaires</label>
+      <textarea id="fact-commentaires" rows="2" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gris-clair);border-radius:6px;font-family:inherit;font-size:12px"></textarea>
+    </div>
+  </div>`;
+
+  document.getElementById('fact-output').innerHTML = html;
+}
+
+
 async function genererFacture() {
   const resId = document.getElementById('fact-resident').value;
   const mois  = document.getElementById('fact-mois').value;
   if (!resId) { toast('Veuillez choisir un résident','error'); return; }
   if (!mois)  { toast('Veuillez choisir un mois','error'); return; }
+
+  // Cas particulier : appartement vacant (valeur au format "vacant:{appt}")
+  if (resId.startsWith('vacant:')) {
+    return genererFactureVacant(resId.slice(7), mois);
+  }
 
   const res = allResidents.find(r => r.id == resId);
   if (!res) { toast('Résident introuvable','error'); return; }
@@ -6654,8 +6840,11 @@ async function loadFactSavedList() {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Sélectionnez un résident pour voir ses factures</td></tr>';
     return;
   }
+  const filtreListe = resId.startsWith('vacant:')
+    ? `appt_vacant=eq.${resId.slice(7)}`
+    : `resident_id=eq.${resId}`;
   try {
-    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&order=mois.desc&limit=30`);
+    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&${filtreListe}&order=mois.desc&limit=30`);
     if (!data.length) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune facture enregistrée pour ce résident</td></tr>';
       return;
@@ -6691,9 +6880,12 @@ async function genererNumeroFacture(res, mois) {
   const base = `${currentMaison.id}-${res.appt}-${annee}${moisNum}`;
   // Rang = 1 par défaut, incrémenté uniquement si plusieurs factures distinctes existent déjà pour ce résident+mois
   // (cas rare : facture complémentaire). On vérifie l'existant pour déterminer le bon rang.
+  const filtreResident = res._vacant
+    ? `appt_vacant=eq.${res.appt}`
+    : `resident_id=eq.${res.id}`;
   try {
     const existantes = await sbSelect('dl_factures',
-      `?maison_id=eq.${currentMaison.id}&resident_id=eq.${res.id}&mois=eq.${mois}&order=numero.desc`);
+      `?maison_id=eq.${currentMaison.id}&${filtreResident}&mois=eq.${mois}&order=numero.desc`);
     if (!existantes || !existantes.length) return base + '1';
     // Une facture existe déjà pour ce mois — on garde son numéro (la modification ne change pas le numéro)
     return existantes[0].numero;
@@ -6708,11 +6900,14 @@ async function sauvegarderFacture() {
   }
   const res = factCurrentResident;
   const mois = factCurrentMois;
+  const filtreResident = res._vacant
+    ? `appt_vacant=eq.${res.appt}`
+    : `resident_id=eq.${res.id}`;
 
   try {
     // Vérifier si une facture existe déjà pour ce résident+mois (pour conserver son numéro et son id)
     const existantes = await sbSelect('dl_factures',
-      `?maison_id=eq.${currentMaison.id}&resident_id=eq.${res.id}&mois=eq.${mois}&order=numero.desc&limit=1`);
+      `?maison_id=eq.${currentMaison.id}&${filtreResident}&mois=eq.${mois}&order=numero.desc&limit=1`);
     const existante = (existantes && existantes.length) ? existantes[0] : null;
 
     const numero = existante ? existante.numero : await genererNumeroFacture(res, mois);
@@ -6722,7 +6917,7 @@ async function sauvegarderFacture() {
     const contenu = {
       resident: { id: res.id, nom: res.nom, prenom: res.prenom, appt: res.appt,
                   nb_residents: res.nb_residents, categorie: res.categorie,
-                  date_entree: res.date_entree, date_sortie: res.date_sortie },
+                  date_entree: res.date_entree, date_sortie: res.date_sortie, _vacant: !!res._vacant },
       mois,
       evenements: factEvenements,
       joursAmeliore: factJoursAmeliore,
@@ -6732,7 +6927,8 @@ async function sauvegarderFacture() {
 
     const payload = {
       maison_id: currentMaison.id,
-      resident_id: res.id,
+      resident_id: res._vacant ? null : res.id,
+      appt_vacant: res._vacant ? res.appt : null,
       numero,
       mois,
       contenu,
@@ -6776,14 +6972,20 @@ async function reprendreFacture(factureId) {
     if (!data || !data.length) { toast('Facture introuvable','error'); return; }
     const f = data[0];
     const c = f.contenu;
+    const estVacant = !!f.appt_vacant || !!(c && c.resident && c.resident._vacant);
 
     // Repositionner les sélecteurs résident + mois
-    document.getElementById('fact-resident').value = f.resident_id;
+    document.getElementById('fact-resident').value = estVacant ? `vacant:${f.appt_vacant}` : f.resident_id;
     document.getElementById('fact-mois').value = f.mois;
 
-    factCurrentResident = allResidents.find(r => r.id == f.resident_id) || c.resident;
+    if (estVacant) {
+      factCurrentResident = { id: `vacant:${f.appt_vacant}`, nom:'VACANT', prenom:'', appt: f.appt_vacant, nb_residents:1, categorie:null, date_entree:null, date_sortie:null, _vacant:true };
+      factLastKey = `vacant:${f.appt_vacant}-${f.mois}`;
+    } else {
+      factCurrentResident = allResidents.find(r => r.id == f.resident_id) || c.resident;
+      factLastKey = `${f.resident_id}-${f.mois}`;
+    }
     factCurrentMois = f.mois;
-    factLastKey = `${f.resident_id}-${f.mois}`;
     factEvenements = c.evenements || [];
     factJoursAmeliore = c.joursAmeliore || [];
 
@@ -10344,9 +10546,8 @@ async function populateFactResidents() {
     optGroup.label = 'Appartements vacants (aucun résident actif)';
     for (const appt of apptsVacants) {
       const opt = document.createElement('option');
-      opt.value = '';
-      opt.disabled = true;
-      opt.textContent = `Appt. ${appt} — vacant`;
+      opt.value = `vacant:${appt}`;
+      opt.textContent = `Appt. ${appt} — Vacant`;
       optGroup.appendChild(opt);
     }
     sel.appendChild(optGroup);
@@ -10374,7 +10575,12 @@ function populateFactMois() {
 
 function onFactResidentChange() {
   const id = document.getElementById('fact-resident').value;
-  factCurrentResident = allResidents.find(r => r.id == id) || null;
+  if (id.startsWith('vacant:')) {
+    const appt = id.slice(7);
+    factCurrentResident = { id, nom:'VACANT', prenom:'', appt, nb_residents:1, categorie:null, date_entree:null, date_sortie:null, _vacant:true };
+  } else {
+    factCurrentResident = allResidents.find(r => r.id == id) || null;
+  }
   loadFactSavedList();
 }
 
@@ -10515,11 +10721,92 @@ function fmtDateFr(d) {
   return `${String(dt.getDate()).padStart(2,'0')} ${MOIS_LONG[dt.getMonth()]} ${dt.getFullYear()}`;
 }
 
+async function genererFactureVacant(appt, mois) {
+  const nouvelleCle = `vacant:${appt}-${mois}`;
+  factCurrentResident = { id: `vacant:${appt}`, nom: 'VACANT', prenom: '', appt, nb_residents: 1, categorie: null, date_entree: null, date_sortie: null, _vacant: true };
+  factCurrentMois = mois;
+  factLastKey = nouvelleCle;
+  factEvenements = [];
+  factJoursAmeliore = [];
+
+  const [annee, moisNum] = mois.split('-').map(Number);
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  const tarifPrestaBase = await getTarifCarte('Résidents_Adhésion mensuelle Individuel', mois);
+  const prestaBaseTTC = tarifPrestaBase ? parseFloat(tarifPrestaBase.prix1) : 0;
+
+  factLastCalc = {
+    totaux: { totRepasSalle:0, totRepasInvite:0, totPlateauPorte:0, totPlateauEmporte:0, totPotage:0, totBoisson:0, nbRepasAmeliore:0, nbTotalRepas:0 },
+    tarifs: { prixN1:0, prixN2:0, tvaRepas:0, prixPortage:0, tarifInviteTTC:null, tarifPotageTTC:null },
+    montants: { repasSalleHT:0, repasInviteHT:0, plateauPorteHT:0, ameliorHT:0, potageHT:0 },
+    loyer: { ht:0, prorataQte:1 },
+    charges: { ht:0, prorataQte:1 },
+    prestaBase: { ttc: prestaBaseTTC, qte: 1, libelle: 'Résidents_Adhésion mensuelle Individuel', tarif: tarifPrestaBase },
+    cotisationRestaurant: { ttc:0, totalPourSeuilR:0, tarif:null },
+    adhesionAnnuelle: { ttc:0, qte:0, tarif:null },
+  };
+
+  const html = `<div class="print-doc" id="fact-print-content">
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px;background:#fafafa">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Mois :</strong> <span style="color:#c0392b">${moisLabel}</span></div>
+          <div><strong>Résident :</strong> <span style="color:#c0392b">VACANT</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Appt. :</strong> <span style="color:#2980b9">${appt}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:16px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:10px">Services</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px" class="fact-table-droite">
+        <thead>
+          <tr style="background:#333;color:white">
+            <th style="padding:5px;text-align:left">Services</th>
+            <th style="padding:5px">PU TTC</th>
+            <th style="padding:5px">Qté</th>
+            <th style="padding:5px">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#fff8dc">
+            <td>Adhésion mensuelle Individuel</td>
+            <td style="text-align:right">${fmt2(prestaBaseTTC)}€</td>
+            <td style="text-align:center">1</td>
+            <td style="text-align:right;font-weight:600">${fmt2(prestaBaseTTC)}€</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:700;background:#333;color:white">
+            <td colspan="3" style="text-align:right;padding:8px">Montant total à payer :</td>
+            <td id="fact-montant-total" style="text-align:right;padding:8px">${fmt2(prestaBaseTTC)}€</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div style="margin-top:12px">
+      <label style="font-size:13px;font-weight:600">Commentaires</label>
+      <textarea id="fact-commentaires" rows="2" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gris-clair);border-radius:6px;font-family:inherit;font-size:12px"></textarea>
+    </div>
+  </div>`;
+
+  document.getElementById('fact-output').innerHTML = html;
+}
+
+
 async function genererFacture() {
   const resId = document.getElementById('fact-resident').value;
   const mois  = document.getElementById('fact-mois').value;
   if (!resId) { toast('Veuillez choisir un résident','error'); return; }
   if (!mois)  { toast('Veuillez choisir un mois','error'); return; }
+
+  // Cas particulier : appartement vacant (valeur au format "vacant:{appt}")
+  if (resId.startsWith('vacant:')) {
+    return genererFactureVacant(resId.slice(7), mois);
+  }
 
   const res = allResidents.find(r => r.id == resId);
   if (!res) { toast('Résident introuvable','error'); return; }
@@ -11114,8 +11401,11 @@ async function loadFactSavedList() {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Sélectionnez un résident pour voir ses factures</td></tr>';
     return;
   }
+  const filtreListe = resId.startsWith('vacant:')
+    ? `appt_vacant=eq.${resId.slice(7)}`
+    : `resident_id=eq.${resId}`;
   try {
-    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&order=mois.desc&limit=30`);
+    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&${filtreListe}&order=mois.desc&limit=30`);
     if (!data.length) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune facture enregistrée pour ce résident</td></tr>';
       return;
@@ -11151,9 +11441,12 @@ async function genererNumeroFacture(res, mois) {
   const base = `${currentMaison.id}-${res.appt}-${annee}${moisNum}`;
   // Rang = 1 par défaut, incrémenté uniquement si plusieurs factures distinctes existent déjà pour ce résident+mois
   // (cas rare : facture complémentaire). On vérifie l'existant pour déterminer le bon rang.
+  const filtreResident = res._vacant
+    ? `appt_vacant=eq.${res.appt}`
+    : `resident_id=eq.${res.id}`;
   try {
     const existantes = await sbSelect('dl_factures',
-      `?maison_id=eq.${currentMaison.id}&resident_id=eq.${res.id}&mois=eq.${mois}&order=numero.desc`);
+      `?maison_id=eq.${currentMaison.id}&${filtreResident}&mois=eq.${mois}&order=numero.desc`);
     if (!existantes || !existantes.length) return base + '1';
     // Une facture existe déjà pour ce mois — on garde son numéro (la modification ne change pas le numéro)
     return existantes[0].numero;
@@ -11168,11 +11461,14 @@ async function sauvegarderFacture() {
   }
   const res = factCurrentResident;
   const mois = factCurrentMois;
+  const filtreResident = res._vacant
+    ? `appt_vacant=eq.${res.appt}`
+    : `resident_id=eq.${res.id}`;
 
   try {
     // Vérifier si une facture existe déjà pour ce résident+mois (pour conserver son numéro et son id)
     const existantes = await sbSelect('dl_factures',
-      `?maison_id=eq.${currentMaison.id}&resident_id=eq.${res.id}&mois=eq.${mois}&order=numero.desc&limit=1`);
+      `?maison_id=eq.${currentMaison.id}&${filtreResident}&mois=eq.${mois}&order=numero.desc&limit=1`);
     const existante = (existantes && existantes.length) ? existantes[0] : null;
 
     const numero = existante ? existante.numero : await genererNumeroFacture(res, mois);
@@ -11182,7 +11478,7 @@ async function sauvegarderFacture() {
     const contenu = {
       resident: { id: res.id, nom: res.nom, prenom: res.prenom, appt: res.appt,
                   nb_residents: res.nb_residents, categorie: res.categorie,
-                  date_entree: res.date_entree, date_sortie: res.date_sortie },
+                  date_entree: res.date_entree, date_sortie: res.date_sortie, _vacant: !!res._vacant },
       mois,
       evenements: factEvenements,
       joursAmeliore: factJoursAmeliore,
@@ -11192,7 +11488,8 @@ async function sauvegarderFacture() {
 
     const payload = {
       maison_id: currentMaison.id,
-      resident_id: res.id,
+      resident_id: res._vacant ? null : res.id,
+      appt_vacant: res._vacant ? res.appt : null,
       numero,
       mois,
       contenu,
@@ -11236,14 +11533,20 @@ async function reprendreFacture(factureId) {
     if (!data || !data.length) { toast('Facture introuvable','error'); return; }
     const f = data[0];
     const c = f.contenu;
+    const estVacant = !!f.appt_vacant || !!(c && c.resident && c.resident._vacant);
 
     // Repositionner les sélecteurs résident + mois
-    document.getElementById('fact-resident').value = f.resident_id;
+    document.getElementById('fact-resident').value = estVacant ? `vacant:${f.appt_vacant}` : f.resident_id;
     document.getElementById('fact-mois').value = f.mois;
 
-    factCurrentResident = allResidents.find(r => r.id == f.resident_id) || c.resident;
+    if (estVacant) {
+      factCurrentResident = { id: `vacant:${f.appt_vacant}`, nom:'VACANT', prenom:'', appt: f.appt_vacant, nb_residents:1, categorie:null, date_entree:null, date_sortie:null, _vacant:true };
+      factLastKey = `vacant:${f.appt_vacant}-${f.mois}`;
+    } else {
+      factCurrentResident = allResidents.find(r => r.id == f.resident_id) || c.resident;
+      factLastKey = `${f.resident_id}-${f.mois}`;
+    }
     factCurrentMois = f.mois;
-    factLastKey = `${f.resident_id}-${f.mois}`;
     factEvenements = c.evenements || [];
     factJoursAmeliore = c.joursAmeliore || [];
 
@@ -14804,9 +15107,8 @@ async function populateFactResidents() {
     optGroup.label = 'Appartements vacants (aucun résident actif)';
     for (const appt of apptsVacants) {
       const opt = document.createElement('option');
-      opt.value = '';
-      opt.disabled = true;
-      opt.textContent = `Appt. ${appt} — vacant`;
+      opt.value = `vacant:${appt}`;
+      opt.textContent = `Appt. ${appt} — Vacant`;
       optGroup.appendChild(opt);
     }
     sel.appendChild(optGroup);
@@ -14834,7 +15136,12 @@ function populateFactMois() {
 
 function onFactResidentChange() {
   const id = document.getElementById('fact-resident').value;
-  factCurrentResident = allResidents.find(r => r.id == id) || null;
+  if (id.startsWith('vacant:')) {
+    const appt = id.slice(7);
+    factCurrentResident = { id, nom:'VACANT', prenom:'', appt, nb_residents:1, categorie:null, date_entree:null, date_sortie:null, _vacant:true };
+  } else {
+    factCurrentResident = allResidents.find(r => r.id == id) || null;
+  }
   loadFactSavedList();
 }
 
@@ -14975,11 +15282,92 @@ function fmtDateFr(d) {
   return `${String(dt.getDate()).padStart(2,'0')} ${MOIS_LONG[dt.getMonth()]} ${dt.getFullYear()}`;
 }
 
+async function genererFactureVacant(appt, mois) {
+  const nouvelleCle = `vacant:${appt}-${mois}`;
+  factCurrentResident = { id: `vacant:${appt}`, nom: 'VACANT', prenom: '', appt, nb_residents: 1, categorie: null, date_entree: null, date_sortie: null, _vacant: true };
+  factCurrentMois = mois;
+  factLastKey = nouvelleCle;
+  factEvenements = [];
+  factJoursAmeliore = [];
+
+  const [annee, moisNum] = mois.split('-').map(Number);
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  const tarifPrestaBase = await getTarifCarte('Résidents_Adhésion mensuelle Individuel', mois);
+  const prestaBaseTTC = tarifPrestaBase ? parseFloat(tarifPrestaBase.prix1) : 0;
+
+  factLastCalc = {
+    totaux: { totRepasSalle:0, totRepasInvite:0, totPlateauPorte:0, totPlateauEmporte:0, totPotage:0, totBoisson:0, nbRepasAmeliore:0, nbTotalRepas:0 },
+    tarifs: { prixN1:0, prixN2:0, tvaRepas:0, prixPortage:0, tarifInviteTTC:null, tarifPotageTTC:null },
+    montants: { repasSalleHT:0, repasInviteHT:0, plateauPorteHT:0, ameliorHT:0, potageHT:0 },
+    loyer: { ht:0, prorataQte:1 },
+    charges: { ht:0, prorataQte:1 },
+    prestaBase: { ttc: prestaBaseTTC, qte: 1, libelle: 'Résidents_Adhésion mensuelle Individuel', tarif: tarifPrestaBase },
+    cotisationRestaurant: { ttc:0, totalPourSeuilR:0, tarif:null },
+    adhesionAnnuelle: { ttc:0, qte:0, tarif:null },
+  };
+
+  const html = `<div class="print-doc" id="fact-print-content">
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px;background:#fafafa">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Mois :</strong> <span style="color:#c0392b">${moisLabel}</span></div>
+          <div><strong>Résident :</strong> <span style="color:#c0392b">VACANT</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Appt. :</strong> <span style="color:#2980b9">${appt}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:16px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:10px">Services</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px" class="fact-table-droite">
+        <thead>
+          <tr style="background:#333;color:white">
+            <th style="padding:5px;text-align:left">Services</th>
+            <th style="padding:5px">PU TTC</th>
+            <th style="padding:5px">Qté</th>
+            <th style="padding:5px">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#fff8dc">
+            <td>Adhésion mensuelle Individuel</td>
+            <td style="text-align:right">${fmt2(prestaBaseTTC)}€</td>
+            <td style="text-align:center">1</td>
+            <td style="text-align:right;font-weight:600">${fmt2(prestaBaseTTC)}€</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:700;background:#333;color:white">
+            <td colspan="3" style="text-align:right;padding:8px">Montant total à payer :</td>
+            <td id="fact-montant-total" style="text-align:right;padding:8px">${fmt2(prestaBaseTTC)}€</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div style="margin-top:12px">
+      <label style="font-size:13px;font-weight:600">Commentaires</label>
+      <textarea id="fact-commentaires" rows="2" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gris-clair);border-radius:6px;font-family:inherit;font-size:12px"></textarea>
+    </div>
+  </div>`;
+
+  document.getElementById('fact-output').innerHTML = html;
+}
+
+
 async function genererFacture() {
   const resId = document.getElementById('fact-resident').value;
   const mois  = document.getElementById('fact-mois').value;
   if (!resId) { toast('Veuillez choisir un résident','error'); return; }
   if (!mois)  { toast('Veuillez choisir un mois','error'); return; }
+
+  // Cas particulier : appartement vacant (valeur au format "vacant:{appt}")
+  if (resId.startsWith('vacant:')) {
+    return genererFactureVacant(resId.slice(7), mois);
+  }
 
   const res = allResidents.find(r => r.id == resId);
   if (!res) { toast('Résident introuvable','error'); return; }
@@ -15574,8 +15962,11 @@ async function loadFactSavedList() {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Sélectionnez un résident pour voir ses factures</td></tr>';
     return;
   }
+  const filtreListe = resId.startsWith('vacant:')
+    ? `appt_vacant=eq.${resId.slice(7)}`
+    : `resident_id=eq.${resId}`;
   try {
-    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&order=mois.desc&limit=30`);
+    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&${filtreListe}&order=mois.desc&limit=30`);
     if (!data.length) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune facture enregistrée pour ce résident</td></tr>';
       return;
@@ -15611,9 +16002,12 @@ async function genererNumeroFacture(res, mois) {
   const base = `${currentMaison.id}-${res.appt}-${annee}${moisNum}`;
   // Rang = 1 par défaut, incrémenté uniquement si plusieurs factures distinctes existent déjà pour ce résident+mois
   // (cas rare : facture complémentaire). On vérifie l'existant pour déterminer le bon rang.
+  const filtreResident = res._vacant
+    ? `appt_vacant=eq.${res.appt}`
+    : `resident_id=eq.${res.id}`;
   try {
     const existantes = await sbSelect('dl_factures',
-      `?maison_id=eq.${currentMaison.id}&resident_id=eq.${res.id}&mois=eq.${mois}&order=numero.desc`);
+      `?maison_id=eq.${currentMaison.id}&${filtreResident}&mois=eq.${mois}&order=numero.desc`);
     if (!existantes || !existantes.length) return base + '1';
     // Une facture existe déjà pour ce mois — on garde son numéro (la modification ne change pas le numéro)
     return existantes[0].numero;
@@ -15628,11 +16022,14 @@ async function sauvegarderFacture() {
   }
   const res = factCurrentResident;
   const mois = factCurrentMois;
+  const filtreResident = res._vacant
+    ? `appt_vacant=eq.${res.appt}`
+    : `resident_id=eq.${res.id}`;
 
   try {
     // Vérifier si une facture existe déjà pour ce résident+mois (pour conserver son numéro et son id)
     const existantes = await sbSelect('dl_factures',
-      `?maison_id=eq.${currentMaison.id}&resident_id=eq.${res.id}&mois=eq.${mois}&order=numero.desc&limit=1`);
+      `?maison_id=eq.${currentMaison.id}&${filtreResident}&mois=eq.${mois}&order=numero.desc&limit=1`);
     const existante = (existantes && existantes.length) ? existantes[0] : null;
 
     const numero = existante ? existante.numero : await genererNumeroFacture(res, mois);
@@ -15642,7 +16039,7 @@ async function sauvegarderFacture() {
     const contenu = {
       resident: { id: res.id, nom: res.nom, prenom: res.prenom, appt: res.appt,
                   nb_residents: res.nb_residents, categorie: res.categorie,
-                  date_entree: res.date_entree, date_sortie: res.date_sortie },
+                  date_entree: res.date_entree, date_sortie: res.date_sortie, _vacant: !!res._vacant },
       mois,
       evenements: factEvenements,
       joursAmeliore: factJoursAmeliore,
@@ -15652,7 +16049,8 @@ async function sauvegarderFacture() {
 
     const payload = {
       maison_id: currentMaison.id,
-      resident_id: res.id,
+      resident_id: res._vacant ? null : res.id,
+      appt_vacant: res._vacant ? res.appt : null,
       numero,
       mois,
       contenu,
@@ -15696,14 +16094,20 @@ async function reprendreFacture(factureId) {
     if (!data || !data.length) { toast('Facture introuvable','error'); return; }
     const f = data[0];
     const c = f.contenu;
+    const estVacant = !!f.appt_vacant || !!(c && c.resident && c.resident._vacant);
 
     // Repositionner les sélecteurs résident + mois
-    document.getElementById('fact-resident').value = f.resident_id;
+    document.getElementById('fact-resident').value = estVacant ? `vacant:${f.appt_vacant}` : f.resident_id;
     document.getElementById('fact-mois').value = f.mois;
 
-    factCurrentResident = allResidents.find(r => r.id == f.resident_id) || c.resident;
+    if (estVacant) {
+      factCurrentResident = { id: `vacant:${f.appt_vacant}`, nom:'VACANT', prenom:'', appt: f.appt_vacant, nb_residents:1, categorie:null, date_entree:null, date_sortie:null, _vacant:true };
+      factLastKey = `vacant:${f.appt_vacant}-${f.mois}`;
+    } else {
+      factCurrentResident = allResidents.find(r => r.id == f.resident_id) || c.resident;
+      factLastKey = `${f.resident_id}-${f.mois}`;
+    }
     factCurrentMois = f.mois;
-    factLastKey = `${f.resident_id}-${f.mois}`;
     factEvenements = c.evenements || [];
     factJoursAmeliore = c.joursAmeliore || [];
 
