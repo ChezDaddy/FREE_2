@@ -314,6 +314,39 @@
   .wcal-footer { margin-top: 10px; text-align: center; }
   .wcal-footer button { background: none; border: 1px solid var(--gris-clair); border-radius: 4px; padding: 6px 14px; font-size: 12px; cursor: pointer; color: var(--gris-mid); }
   .wcal-footer button:hover { background: var(--gris-clair); }
+
+  /* CALENDRIER ÉVÉNEMENTS — Facturation (Jours off / Hospitalisation / Repas amélioré) */
+  .evcal-popup {
+    position: absolute; z-index: 300; background: white; border: 1px solid var(--gris-clair);
+    border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 14px; width: 260px;
+  }
+  .evcal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .evcal-header button { background: none; border: none; cursor: pointer; font-size: 16px; color: var(--gris-mid); padding: 4px 10px; border-radius: 4px; }
+  .evcal-header button:hover { background: var(--gris-clair); }
+  .evcal-header .evcal-month-label { font-weight: 700; font-size: 13px; text-transform: capitalize; }
+  .evcal-grid { width: 100%; border-collapse: collapse; }
+  .evcal-grid th { font-size: 10px; color: var(--gris-mid); font-weight: 600; padding: 4px 2px; text-align: center; }
+  .evcal-grid td { text-align: center; padding: 6px 4px; font-size: 12px; cursor: pointer; color: #333; border-radius: 4px; transition: background .12s; }
+  .evcal-grid td.evcal-other-month { color: #ccc; cursor: default; }
+  .evcal-grid td.evcal-day:hover { background: var(--rouge-light); }
+  .evcal-grid td.evcal-selected { background: var(--rouge); color: white; font-weight: 700; }
+  .evcal-grid td.evcal-in-range { background: #fde8d4; }
+  .evcal-footer { margin-top: 10px; text-align: center; }
+  .evcal-footer button { background: none; border: 1px solid var(--gris-clair); border-radius: 4px; padding: 6px 14px; font-size: 12px; cursor: pointer; color: var(--gris-mid); }
+  .evcal-footer button:hover { background: var(--gris-clair); }
+
+  /* Chips (badges) jours off / plage hospi déjà ajoutés */
+  .evchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 14px;
+    font-size: 12px; font-weight: 600; margin: 3px 4px 3px 0; }
+  .evchip-off { background: #fdf0d8; color: #8a5c00; border: 1px solid #e59e00; }
+  .evchip-hospi { background: #e3ece9; color: #2f5248; border: 1px solid #8CADA1; }
+  .evchip button { background: none; border: none; cursor: pointer; font-size: 13px; color: inherit; padding: 0; line-height: 1; opacity: .65; }
+  .evchip button:hover { opacity: 1; }
+  .evcal-add-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--gris-fonce);
+    color: white; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    vertical-align: middle; }
+  .evcal-add-btn:hover { background: var(--rouge); }
+  .evcal-add-btn:disabled { background: #ccc; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -334,7 +367,7 @@
     </div>
     <button class="btn-login" onclick="doLogin()">Se connecter</button>
     <div class="login-error" id="login-error">Identifiant ou mot de passe incorrect.</div>
-    <div class="login-version">v0.4 — Juin 2026</div>
+    <div class="login-version">v1.0.0 — Juin 2026</div>
   </div>
 </div>
 
@@ -373,6 +406,12 @@
         </button>
         <button class="nav-item" onclick="showPage('export-csv')" id="nav-export-csv">
           <span class="nav-icon">📥</span> Export CSV
+        </button>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">Facturation</div>
+        <button class="nav-item" onclick="showPage('facturation')" id="nav-facturation">
+          <span class="nav-icon">🧾</span> Facturation
         </button>
       </div>
       <div class="nav-section">
@@ -692,6 +731,10 @@
               <input type="number" id="seuil-n" min="1" max="99" style="width:80px" onchange="saveSeuilN()">
             </div>
             <div class="form-group">
+              <label>Seuil R (nb mini repas/mois — cotisation restaurant)</label>
+              <input type="number" id="seuil-r" min="1" max="31" style="width:80px" onchange="saveSeuilR()">
+            </div>
+            <div class="form-group">
               <label>Jours de potage</label>
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px" id="jours-potage-check">
                 <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:13px"><input type="checkbox" data-jour="1"> Lundi</label>
@@ -715,7 +758,7 @@
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Libellé</th><th>Validité</th><th>Prix (<N)</th><th>Prix (≥N)</th><th>TVA</th><th>HT (<N)</th><th>TVA (<N)</th><th>HT (≥N)</th><th>TVA (≥N)</th><th>Actions</th></tr>
+                  <tr><th>Libellé</th><th>Validité</th><th>Prix (≤N)</th><th>Prix (&gt;N)</th><th>TVA</th><th>HT (≤N)</th><th>TVA (≤N)</th><th>HT (&gt;N)</th><th>TVA (&gt;N)</th><th>Actions</th></tr>
                 </thead>
                 <tbody id="carte-resident-body"></tbody>
               </table>
@@ -730,6 +773,43 @@
                 <tbody id="carte-nonresident-body"></tbody>
               </table>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAGE: FACTURATION -->
+      <div class="page" id="page-facturation">
+        <div class="page-header">
+          <h1>Facturation</h1>
+          <p>Génération des factures résidents mensuelles</p>
+        </div>
+
+        <div class="card no-print">
+          <div class="btn-group" style="flex-wrap:wrap">
+            <div class="form-group">
+              <label>Résident</label>
+              <select id="fact-resident" style="width:240px" onchange="onFactResidentChange()">
+                <option value="">— Choisir un résident —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Mois à facturer</label>
+              <select id="fact-mois" style="width:200px" onchange="onFactMoisChange()"></select>
+            </div>
+            <button class="btn btn-primary" onclick="genererFacture()">Générer la facture</button>
+            <button class="btn btn-secondary" onclick="resetFacturation()">✕ Vider</button>
+          </div>
+        </div>
+
+        <div id="fact-output" class="print-doc-wrap"></div>
+
+        <div class="card no-print" style="margin-top:20px">
+          <h3 style="margin-top:0">Factures enregistrées</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>N° Facture</th><th>Résident</th><th>Mois</th><th>Montant TTC</th><th>Statut</th><th>Dernière modif.</th><th style="width:60px">Actions</th></tr></thead>
+              <tbody id="fact-saved-list"><tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Sélectionnez un résident pour voir ses factures</td></tr></tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -754,6 +834,7 @@
                 <div class="form-group"><label>Nom</label><input type="text" id="new-maison-nom" placeholder="Nom de la maison"></div>
                 <div class="form-group"><label>Ville</label><input type="text" id="new-maison-ville" placeholder="Ville"></div>
                 <div class="form-group"><label>Adresse</label><input type="text" id="new-maison-adresse" placeholder="Adresse"></div>
+                <div class="form-group form-span2"><label>Mention légale (en-tête facture)</label><input type="text" id="new-maison-mention" placeholder="Ex: Chez Daddy La Roseraie, 90 rue Paul Doumer - 59110 La Madeleine – SIRET 44 031 343 500 016"></div>
                 <div class="form-group"><label>Login</label><input type="text" id="new-maison-login" placeholder="Login"></div>
                 <div class="form-group"><label>Mot de passe initial</label><input type="text" id="new-maison-mdp" placeholder="MDP initial"></div>
                 <div class="form-group"><label>Couleur</label><input type="color" id="new-maison-color" value="#8CADA1" style="height:38px;width:60px;padding:2px;cursor:pointer"></div>
@@ -772,7 +853,7 @@
               <h3>Maisons actives</h3>
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>Nom</th><th>Ville</th><th>Login</th><th>Services</th><th>Couleur</th><th>Actions</th></tr></thead>
+                  <thead><tr><th>Nom</th><th>Ville</th><th>Login</th><th>Services</th><th>Couleur</th><th>Mention légale (facture)</th><th>Actions</th></tr></thead>
                   <tbody id="admin-maisons-body"></tbody>
                 </table>
               </div>
@@ -901,18 +982,18 @@
           <option value="nonresident">Non-résident</option>
         </select>
       </div>
-      <div class="form-group"><label>Prix public (&lt;N) en €</label><input type="number" id="carte-prix1" step="0.01" oninput="calcCarteHT()"></div>
-      <div class="form-group" id="carte-prix2-group"><label>Prix public (≥N) en €</label><input type="number" id="carte-prix2" step="0.01" oninput="calcCarteHT()"></div>
+      <div class="form-group"><label>Prix public (≤N) en €</label><input type="number" id="carte-prix1" step="0.01" oninput="calcCarteHT()"></div>
+      <div class="form-group" id="carte-prix2-group"><label>Prix public (&gt;N) en €</label><input type="number" id="carte-prix2" step="0.01" oninput="calcCarteHT()"></div>
       <div class="form-group"><label>Taux TVA (%)</label>
         <select id="carte-tva" onchange="calcCarteHT()">
           <option value="0">0%</option><option value="5.5">5,5%</option>
           <option value="10" selected>10%</option><option value="20">20%</option>
         </select>
       </div>
-      <div class="form-group"><label>HT (&lt;N)</label><input type="text" id="carte-ht1" readonly></div>
-      <div class="form-group"><label>TVA (&lt;N)</label><input type="text" id="carte-tva1" readonly></div>
-      <div class="form-group" id="carte-ht2-group"><label>HT (≥N)</label><input type="text" id="carte-ht2" readonly></div>
-      <div class="form-group" id="carte-tva2-group"><label>TVA (≥N)</label><input type="text" id="carte-tva2" readonly></div>
+      <div class="form-group"><label>HT (≤N)</label><input type="text" id="carte-ht1" readonly></div>
+      <div class="form-group"><label>TVA (≤N)</label><input type="text" id="carte-tva1" readonly></div>
+      <div class="form-group" id="carte-ht2-group"><label>HT (&gt;N)</label><input type="text" id="carte-ht2" readonly></div>
+      <div class="form-group" id="carte-tva2-group"><label>TVA (&gt;N)</label><input type="text" id="carte-tva2" readonly></div>
       <div class="form-group">
         <label>Début de validité</label>
         <input type="month" id="carte-debut" value="2026-01" title="Mois et année de début de validité">
@@ -983,6 +1064,7 @@ const CARTE_DEFAULT = [
   { type:'resident', libelle:'Repas Invité tarif réduit',                prix1:15.58,  prix2:null, tva:10 },
   { type:'resident', libelle:'Repas Invité Enfant',                      prix1:12.00,  prix2:null, tva:10 },
   { type:'resident', libelle:'Repas amélioré',                           prix1:1.50,   prix2:null, tva:10 },
+  { type:'resident', libelle:'Cotisation Restaurant',                    prix1:12.94,  prix2:null, tva:10 },
   { type:'resident', libelle:'Portage repas',                            prix1:2.00,   prix2:null, tva:10 },
   { type:'resident', libelle:'Plateau à emporter',                       prix1:0.00,   prix2:null, tva:10 },
   { type:'resident', libelle:'Potage (1L)',                              prix1:2.20,   prix2:null, tva:10 },
@@ -1009,6 +1091,7 @@ let allMaisons = [];
 let allResidents = [];
 let allCarte = [];
 let seuilN = 15;
+let seuilR = 12;
 let joursPotage = [2, 5]; // mardi=2, vendredi=5 par défaut (0=dim,1=lun,...,6=sam)
 let confirmResolve = null;
 
@@ -1285,6 +1368,496 @@ function showPage(name) {
   if (name === 'feuille-mh') initMH();
   if (name === 'feuille-chef') initChef();
   if (name === 'export-csv') initCSV();
+  if (name === 'facturation') initFacturation();
+}
+
+// =============================
+// FACTURATION (Lot 2)
+// =============================
+
+let factCurrentResident = null; // résident sélectionné (objet complet)
+let factCurrentMois = null;     // mois facturé sélectionné (YYYY-MM)
+let factLastKey = null;         // mémorise resident_id+mois de la dernière génération (anti-fuite)
+let factEvenements = [];        // événements (jours off / hospi) du résident pour le mois facturé, chargés/édités en mémoire
+
+async function initFacturation() {
+  await populateFactResidents();
+  populateFactMois();
+  resetFacturation();
+}
+
+async function populateFactResidents() {
+  const sel = document.getElementById('fact-resident');
+  const cur = sel.value;
+  try {
+    const data = await sbSelect('dl_residents', `?maison_id=eq.${currentMaison.id}&order=nom`);
+    allResidents = data;
+  } catch(e) { allResidents = []; }
+
+  // Seuls les résidents non-NR sont facturables
+  const facturables = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+
+  sel.innerHTML = '<option value="">— Choisir un résident —</option>';
+  for (const r of facturables) {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = `${r.nom} ${r.prenom||''} (Appt. ${r.appt||'—'})`;
+    sel.appendChild(opt);
+  }
+  if (cur && facturables.find(r => r.id == cur)) sel.value = cur;
+}
+
+function populateFactMois() {
+  const sel = document.getElementById('fact-mois');
+  const cur = sel.value;
+  const today = new Date();
+  const MOIS_LONG_LOCAL = MOIS_LONG;
+  let html = '';
+  // Les 13 derniers mois écoulés (le mois précédent en premier, par défaut sélectionné)
+  for (let i = 1; i <= 13; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const moisStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label = `${MOIS_LONG_LOCAL[d.getMonth()]} ${d.getFullYear()}`;
+    const selected = (i === 1) ? 'selected' : '';
+    html += `<option value="${moisStr}" ${selected}>${label}</option>`;
+  }
+  sel.innerHTML = html;
+  if (cur) sel.value = cur;
+}
+
+function onFactResidentChange() {
+  const id = document.getElementById('fact-resident').value;
+  factCurrentResident = allResidents.find(r => r.id == id) || null;
+  loadFactSavedList();
+}
+
+function onFactMoisChange() {
+  factCurrentMois = document.getElementById('fact-mois').value;
+  loadFactSavedList();
+}
+
+function resetFacturation() {
+  document.getElementById('fact-output').innerHTML = '';
+  factLastKey = null;
+  factEvenements = [];
+}
+
+// ========== Calendrier événements générique (Jours off / Hospitalisation) ==========
+let evcalViewDate = new Date();
+let evcalMode = null;      // 'single' (jours off) | 'range' (hospitalisation)
+let evcalRangeStart = null; // pour le mode range : 1er clic = début
+let evcalCallback = null;   // fonction appelée avec la date (ou plage) choisie
+
+function openEvCal(triggerEl, mode, baseMonthDate, callback) {
+  evcalMode = mode;
+  evcalRangeStart = null;
+  evcalCallback = callback;
+  evcalViewDate = baseMonthDate ? new Date(baseMonthDate) : new Date();
+
+  // Fermer un éventuel popup déjà ouvert
+  closeEvCal();
+
+  const popup = document.createElement('div');
+  popup.className = 'evcal-popup';
+  popup.id = 'evcal-popup';
+  document.body.appendChild(popup);
+
+  // Positionner sous le bouton déclencheur
+  const rect = triggerEl.getBoundingClientRect();
+  popup.style.top = (window.scrollY + rect.bottom + 6) + 'px';
+  popup.style.left = (window.scrollX + rect.left) + 'px';
+
+  renderEvCal();
+
+  // Fermer si clic en dehors
+  setTimeout(() => {
+    document.addEventListener('click', evcalOutsideClickHandler);
+  }, 0);
+}
+
+function evcalOutsideClickHandler(e) {
+  const popup = document.getElementById('evcal-popup');
+  if (popup && !popup.contains(e.target)) {
+    closeEvCal();
+  }
+}
+
+function closeEvCal() {
+  const popup = document.getElementById('evcal-popup');
+  if (popup) popup.remove();
+  document.removeEventListener('click', evcalOutsideClickHandler);
+}
+
+function renderEvCal() {
+  const popup = document.getElementById('evcal-popup');
+  if (!popup) return;
+  const year = evcalViewDate.getFullYear();
+  const month = evcalViewDate.getMonth();
+  const monthLabel = MOIS_LONG[month] + ' ' + year;
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+  const todayStr = fmtDateISO(new Date());
+
+  let html = `
+    <div class="evcal-header">
+      <button onclick="evcalNavigate(-1)" type="button">‹</button>
+      <span class="evcal-month-label">${monthLabel}</span>
+      <button onclick="evcalNavigate(1)" type="button">›</button>
+    </div>
+    <table class="evcal-grid">
+      <thead><tr><th>L</th><th>M</th><th>M</th><th>J</th><th>V</th><th>S</th><th>D</th></tr></thead>
+      <tbody>`;
+
+  let cursor = new Date(startMonday);
+  for (let w = 0; w < 6; w++) {
+    html += '<tr>';
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(cursor);
+      const dayStr = fmtDateISO(day);
+      const otherMonth = day.getMonth() !== month;
+      let cls = otherMonth ? 'evcal-other-month' : 'evcal-day';
+
+      if (!otherMonth && evcalMode === 'range' && evcalRangeStart) {
+        if (dayStr === evcalRangeStart) cls += ' evcal-selected';
+        else if (dayStr > evcalRangeStart) cls += ''; // sera affiné au survol, simplifié ici
+      }
+
+      const onclick = otherMonth ? '' : `onclick="evcalDayClick('${dayStr}')"`;
+      html += `<td class="${cls}" ${onclick}>${day.getDate()}</td>`;
+      cursor = addDays(cursor, 1);
+    }
+    html += '</tr>';
+    if (cursor.getMonth() !== month && w >= 4) break;
+  }
+
+  html += `</tbody></table>
+    <div class="evcal-footer">
+      ${evcalMode === 'range' && evcalRangeStart ? `<span style="font-size:11px;color:var(--gris-mid)">Début : ${fmtDateFr(evcalRangeStart)} — cliquez la date de fin</span>` : ''}
+      <button type="button" onclick="closeEvCal()">Annuler</button>
+    </div>`;
+
+  popup.innerHTML = html;
+}
+
+function evcalNavigate(delta) {
+  evcalViewDate = new Date(evcalViewDate.getFullYear(), evcalViewDate.getMonth() + delta, 1);
+  renderEvCal();
+}
+
+function evcalDayClick(dayStr) {
+  if (evcalMode === 'single') {
+    evcalCallback(dayStr, null);
+    closeEvCal();
+  } else if (evcalMode === 'range') {
+    if (!evcalRangeStart) {
+      evcalRangeStart = dayStr;
+      renderEvCal();
+    } else {
+      let debut = evcalRangeStart, fin = dayStr;
+      if (fin < debut) { [debut, fin] = [fin, debut]; } // garantir debut <= fin
+      evcalCallback(debut, fin);
+      closeEvCal();
+    }
+  }
+}
+
+function fmtDateFr(d) {
+  if (!d) return '';
+  const dt = (typeof d === 'string') ? new Date(d + 'T00:00:00') : d;
+  return `${String(dt.getDate()).padStart(2,'0')} ${MOIS_LONG[dt.getMonth()]} ${dt.getFullYear()}`;
+}
+
+async function genererFacture() {
+  const resId = document.getElementById('fact-resident').value;
+  const mois  = document.getElementById('fact-mois').value;
+  if (!resId) { toast('Veuillez choisir un résident','error'); return; }
+  if (!mois)  { toast('Veuillez choisir un mois','error'); return; }
+
+  const res = allResidents.find(r => r.id == resId);
+  if (!res) { toast('Résident introuvable','error'); return; }
+
+  const nouvelleCle = `${resId}-${mois}`;
+  const memeFacture = (factLastKey === nouvelleCle);
+
+  factCurrentResident = res;
+  factCurrentMois = mois;
+  factLastKey = nouvelleCle;
+
+  const [annee, moisNum] = mois.split('-').map(Number);
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  // Charger les événements (jours off / hospi) déjà enregistrés pour CE résident et CE mois
+  // (uniquement si on change de résident/mois — sinon on garde les éventuelles modifications en cours)
+  if (!memeFacture) {
+    try {
+      factEvenements = await sbSelect('dl_evenements',
+        `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&mois=eq.${mois}&order=date_debut`);
+    } catch(e) { factEvenements = []; }
+    try {
+      const cfgRA = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${mois}&limit=1`);
+      factJoursAmeliore = (cfgRA && cfgRA.length) ? (cfgRA[0].jours || []) : [];
+    } catch(e) { factJoursAmeliore = []; }
+  }
+
+  // ===== SECTION 1 : informations résident =====
+  const nomPrenom = `${res.nom} ${res.prenom||''}`.trim();
+  const nbResidents = res.nb_residents || 1;
+  const categorie = res.categorie || '—';
+  const dateEntree = res.date_entree ? fmtDateFr(res.date_entree) : '—';
+  const dateSortie = res.date_sortie ? fmtDateFr(res.date_sortie) : '—';
+
+  let html = `<div class="print-doc" id="fact-print-content">
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px;background:#fafafa">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Mois :</strong> <span style="color:#c0392b">${moisLabel}</span></div>
+          <div><strong>Résident :</strong> <span style="color:#c0392b">${nomPrenom.toUpperCase()}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Appt. :</strong> <span style="color:#2980b9">${res.appt||'—'}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Nb Résidents :</strong> <span style="color:#2980b9">${nbResidents}</span></div>
+          <div><strong>Catégorie :</strong> <span style="color:#2980b9">${categorie}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Date d'entrée :</strong> <span style="color:#2980b9">${dateEntree}</span></div>
+          <div><strong>Date de sortie :</strong> <span style="color:#2980b9">${dateSortie}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px" id="fact-evenements-zone">
+      <div style="font-weight:700;font-size:14px;margin-bottom:12px">Événements</div>
+      <div style="margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600">Jours off</span>
+        <button type="button" class="evcal-add-btn no-print" id="btn-add-joursoff"
+                onclick="onAddJourOff(this)" title="Ajouter un jour off">+</button>
+        <span id="chips-joursoff" style="margin-left:6px"></span>
+      </div>
+      <div style="margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600">Hospitalisation</span>
+        <button type="button" class="evcal-add-btn no-print" id="btn-add-hospi"
+                onclick="onAddHospi(this)" title="Ajouter une période d'hospitalisation">+</button>
+        <span id="chips-hospi" style="margin-left:6px"></span>
+      </div>
+      <div>
+        <span style="font-size:13px;font-weight:600">Jours repas amélioré (paramètre du mois)</span>
+        <button type="button" class="btn btn-secondary btn-sm no-print" style="margin-left:8px"
+                onclick="openRepasAmelioreModal()">📅 Paramétrer</button>
+        <span id="chips-repas-ameliore" style="margin-left:6px;font-size:12px;color:var(--gris-mid)"></span>
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:24px;color:var(--gris-mid);border:1px dashed var(--gris-clair);border-radius:8px">
+      Section Services à venir...
+    </div>
+  </div>`;
+
+  document.getElementById('fact-output').innerHTML = html;
+  renderFactEvenements();
+}
+
+function renderFactEvenements() {
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  const nbJoursMois = new Date(annee, moisNum, 0).getDate();
+
+  const offs = factEvenements.filter(e => e.type === 'off');
+  const hospis = factEvenements.filter(e => e.type === 'hospi');
+
+  const chipsRA = document.getElementById('chips-repas-ameliore');
+  if (chipsRA) {
+    if (factJoursAmeliore && factJoursAmeliore.length) {
+      chipsRA.textContent = `${factJoursAmeliore.length} jour(s) paramétré(s) : ${factJoursAmeliore.sort((a,b)=>a-b).join(', ')}`;
+    } else {
+      chipsRA.textContent = 'Aucun jour paramétré';
+    }
+  }
+
+  const chipsOff = document.getElementById('chips-joursoff');
+  if (chipsOff) {
+    chipsOff.innerHTML = offs.map(e => `
+      <span class="evchip evchip-off">${fmtDateFr(e.date_debut)}
+        <button type="button" onclick="removeFactEvenement('${e.date_debut}','off')" title="Retirer">✕</button>
+      </span>`).join('');
+  }
+
+  const chipsHospi = document.getElementById('chips-hospi');
+  if (chipsHospi) {
+    chipsHospi.innerHTML = hospis.map(e => {
+      const label = (e.date_debut === e.date_fin)
+        ? fmtDateFr(e.date_debut)
+        : `${fmtDateFr(e.date_debut)} → ${fmtDateFr(e.date_fin)}`;
+      return `<span class="evchip evchip-hospi">${label}
+        <button type="button" onclick="removeFactEvenement('${e.date_debut}','hospi')" title="Retirer">✕</button>
+      </span>`;
+    }).join('');
+  }
+
+  // Désactiver le bouton + Jours off si la limite de 10 est atteinte
+  const btnOff = document.getElementById('btn-add-joursoff');
+  if (btnOff) btnOff.disabled = (offs.length >= 10);
+}
+
+function onAddJourOff(btnEl) {
+  const offs = factEvenements.filter(e => e.type === 'off');
+  if (offs.length >= 10) { toast('Maximum 10 jours off par mois','error'); return; }
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  openEvCal(btnEl, 'single', new Date(annee, moisNum-1, 1), (dateStr) => {
+    // Éviter les doublons
+    if (factEvenements.some(e => e.type === 'off' && e.date_debut === dateStr)) {
+      toast('Ce jour est déjà enregistré','info'); return;
+    }
+    factEvenements.push({ type:'off', date_debut: dateStr, date_fin: dateStr, _new: true });
+    renderFactEvenements();
+  });
+}
+
+function onAddHospi(btnEl) {
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  openEvCal(btnEl, 'range', new Date(annee, moisNum-1, 1), (debut, fin) => {
+    factEvenements.push({ type:'hospi', date_debut: debut, date_fin: fin, _new: true });
+    renderFactEvenements();
+  });
+}
+
+function removeFactEvenement(dateDebut, type) {
+  factEvenements = factEvenements.filter(e => !(e.type === type && e.date_debut === dateDebut));
+  renderFactEvenements();
+}
+
+// ========== Popup "Jours repas amélioré" — paramètre persistant par maison + mois ==========
+let factJoursAmeliore = []; // jours du mois (1-31) cochés, en mémoire pendant l'édition de la popup
+
+async function openRepasAmelioreModal() {
+  if (!factCurrentMois) { toast('Choisissez d\'abord un mois','error'); return; }
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  const nbJours = new Date(annee, moisNum, 0).getDate();
+
+  // Charger la configuration existante pour ce mois (pré-remplissage), sinon reprendre le mois précédent
+  try {
+    const cfg = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${factCurrentMois}&limit=1`);
+    if (cfg && cfg.length) {
+      factJoursAmeliore = cfg[0].jours || [];
+    } else {
+      // Pré-remplissage avec le mois précédent si rien n'existe encore pour ce mois
+      const moisPrec = new Date(annee, moisNum-2, 1);
+      const moisPrecStr = `${moisPrec.getFullYear()}-${String(moisPrec.getMonth()+1).padStart(2,'0')}`;
+      const cfgPrec = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${moisPrecStr}&limit=1`);
+      factJoursAmeliore = (cfgPrec && cfgPrec.length) ? (cfgPrec[0].jours || []) : [];
+    }
+  } catch(e) { factJoursAmeliore = []; }
+
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  // Construire la grille de cases à cocher (style calendrier, 7 colonnes)
+  const firstOfMonth = new Date(annee, moisNum-1, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+  let grid = '';
+  let cursor = new Date(startMonday);
+  for (let w = 0; w < 6; w++) {
+    grid += '<tr>';
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(cursor);
+      const otherMonth = day.getMonth() !== (moisNum-1);
+      if (otherMonth) {
+        grid += '<td style="color:#ccc;padding:6px"></td>';
+      } else {
+        const num = day.getDate();
+        const checked = factJoursAmeliore.includes(num) ? 'checked' : '';
+        grid += `<td style="padding:4px;text-align:center">
+          <label style="display:flex;flex-direction:column;align-items:center;cursor:pointer;font-size:11px">
+            <input type="checkbox" value="${num}" class="ra-day-cb" ${checked} style="margin-bottom:2px">
+            ${num}
+          </label>
+        </td>`;
+      }
+      cursor = addDays(cursor, 1);
+    }
+    grid += '</tr>';
+    if (cursor.getMonth() !== (moisNum-1) && w >= 4) break;
+  }
+
+  const modalHtml = `
+    <div id="ra-modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this) closeRepasAmelioreModal()">
+      <div style="background:white;border-radius:10px;padding:20px 24px;max-width:380px;box-shadow:0 12px 40px rgba(0,0,0,.25)">
+        <div style="font-weight:700;font-size:15px;margin-bottom:4px">Jours repas amélioré — ${moisLabel}</div>
+        <div style="font-size:12px;color:var(--gris-mid);margin-bottom:14px">Cochez les jours du mois concernés par le tarif "repas amélioré". Ce paramètre est commun à tous les résidents de la maison pour ce mois.</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr><th style="font-size:10px;color:var(--gris-mid)">L</th><th style="font-size:10px;color:var(--gris-mid)">M</th><th style="font-size:10px;color:var(--gris-mid)">M</th><th style="font-size:10px;color:var(--gris-mid)">J</th><th style="font-size:10px;color:var(--gris-mid)">V</th><th style="font-size:10px;color:var(--gris-mid)">S</th><th style="font-size:10px;color:var(--gris-mid)">D</th></tr></thead>
+          <tbody>${grid}</tbody>
+        </table>
+        <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:10px">
+          <button class="btn btn-secondary" onclick="closeRepasAmelioreModal()">Annuler</button>
+          <button class="btn btn-primary" onclick="saveRepasAmeliore()">Enregistrer</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function closeRepasAmelioreModal() {
+  const overlay = document.getElementById('ra-modal-overlay');
+  if (overlay) overlay.remove();
+}
+
+async function saveRepasAmeliore() {
+  const jours = Array.from(document.querySelectorAll('.ra-day-cb:checked')).map(cb => parseInt(cb.value));
+  try {
+    await sbUpsert('dl_repas_ameliore',
+      { maison_id: currentMaison.id, mois: factCurrentMois, jours, updated_at: new Date().toISOString() },
+      'maison_id,mois');
+    factJoursAmeliore = jours;
+    closeRepasAmelioreModal();
+    renderFactEvenements();
+    toast('Jours repas amélioré enregistrés','success');
+  } catch(e) {
+    toast('Erreur: '+e.message,'error');
+  }
+}
+
+async function loadFactSavedList() {
+  const tbody = document.getElementById('fact-saved-list');
+  if (!tbody) return;
+  const resId = document.getElementById('fact-resident').value;
+  if (!resId) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Sélectionnez un résident pour voir ses factures</td></tr>';
+    return;
+  }
+  try {
+    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&order=mois.desc&limit=30`);
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune facture enregistrée pour ce résident</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(f => {
+      const [a,m] = f.mois.split('-').map(Number);
+      const moisLabel = `${MOIS_LONG[m-1]} ${a}`;
+      const upd = f.updated_at ? new Date(f.updated_at) : null;
+      const updFmt = upd ? `${String(upd.getDate()).padStart(2,'0')}/${String(upd.getMonth()+1).padStart(2,'0')}/${upd.getFullYear()} ${String(upd.getHours()).padStart(2,'0')}:${String(upd.getMinutes()).padStart(2,'0')}` : '—';
+      const statutBadge = f.statut === 'validee'
+        ? '<span class="badge badge-blue">Validée</span>'
+        : '<span class="badge badge-orange">Créée</span>';
+      return `<tr>
+        <td><code>${f.numero}</code></td>
+        <td>${factCurrentResident ? factCurrentResident.nom+' '+(factCurrentResident.prenom||'') : ''}</td>
+        <td>${moisLabel}</td>
+        <td>${f.montant_total != null ? fmt2(f.montant_total)+' €' : '—'}</td>
+        <td>${statutBadge}</td>
+        <td style="font-size:12px;color:var(--gris-mid)">${updFmt}</td>
+        <td><button class="btn btn-secondary btn-sm" title="Reprendre cette facture" onclick="reprendreFacture(${f.id})">✏️</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--rouge);padding:16px">Erreur: ${e.message}</td></tr>`;
+  }
+}
+
+function reprendreFacture(factureId) {
+  // Sera complété à l'étape F (génération + persistance complète)
+  toast('Reprise de facture — à venir', 'info');
 }
 
 // =============================
@@ -1604,6 +2177,10 @@ async function loadCarte() {
     if (cfg.length) seuilN = parseInt(cfg[0].valeur)||15;
     document.getElementById('seuil-n').value = seuilN;
 
+    const cfgR = await sbSelect('dl_config', `?cle=eq.seuil_r&maison_id=eq.${currentMaison.id}&limit=1`);
+    if (cfgR.length) seuilR = parseInt(cfgR[0].valeur)||12;
+    document.getElementById('seuil-r').value = seuilR;
+
     const cfgPot = await sbSelect('dl_config', `?cle=eq.jours_potage&maison_id=eq.${currentMaison.id}&limit=1`);
     if (cfgPot.length) {
       try { joursPotage = JSON.parse(cfgPot[0].valeur); } catch(e) {}
@@ -1674,6 +2251,14 @@ async function saveSeuilN() {
   try {
     await sbUpsert('dl_config', { maison_id: currentMaison.id, cle:'seuil_n', valeur: String(seuilN) }, 'maison_id,cle');
     toast('Seuil N mis à jour', 'success');
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function saveSeuilR() {
+  seuilR = parseInt(document.getElementById('seuil-r').value) || 12;
+  try {
+    await sbUpsert('dl_config', { maison_id: currentMaison.id, cle:'seuil_r', valeur: String(seuilR) }, 'maison_id,cle');
+    toast('Seuil R mis à jour', 'success');
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
 
@@ -3288,6 +3873,13 @@ async function loadAdmin() {
       <td><code>${m.login}</code></td>
       <td><div style="display:flex;gap:8px;flex-wrap:wrap">${checks}</div></td>
       <td><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:${m.couleur||'#ccc'}"></span> ${m.couleur||''}</td>
+      <td>
+        <div style="display:flex;gap:4px;align-items:center">
+          <input type="text" id="mention-legale-${m.id}" value="${(m.mention_legale||'').replace(/"/g,'&quot;')}"
+                 placeholder="Ex: Chez Daddy..., adresse, SIRET" style="width:220px;font-size:11px;padding:4px 6px;border:1px solid var(--gris);border-radius:4px">
+          <button class="btn btn-secondary btn-sm" onclick="saveMentionLegale('${m.id}')" title="Enregistrer">💾</button>
+        </div>
+      </td>
       <td><button class="btn btn-danger btn-sm" onclick="deleteMaison('${m.id}')">Supprimer</button></td>
     </tr>`;
   }).join('');
@@ -3344,13 +3936,14 @@ async function createMaison() {
   if (document.getElementById('new-svc-loc').checked)   svcs.push('loc');
   if (document.getElementById('new-svc-adh').checked)   svcs.push('adh');
 
+  const mention = document.getElementById('new-maison-mention').value.trim();
   if (!nom || !login || !mdp) { toast('Nom, login et MDP obligatoires','error'); return; }
 
   const id = nom.toUpperCase().replace(/[^A-Z0-9]/g,'').substring(0,5) + Date.now().toString().slice(-3);
   try {
-    await sbInsert('dl_maisons', { id, nom, ville, adresse:adr, login, mdp, couleur:color, services:svcs, actif:true });
+    await sbInsert('dl_maisons', { id, nom, ville, adresse:adr, mention_legale:mention, login, mdp, couleur:color, services:svcs, actif:true });
     toast('Maison créée','success');
-    ['nom','ville','adresse','login','mdp'].forEach(f => document.getElementById('new-maison-'+f).value='');
+    ['nom','ville','adresse','mention','login','mdp'].forEach(f => document.getElementById('new-maison-'+f).value='');
     await loadMaisons();
     populateMaisonSelector();
     loadAdmin();
@@ -3367,6 +3960,16 @@ async function saveServicesMaison(maisId) {
     const m = allMaisons.find(x => x.id === maisId);
     if (m) m.services = svcs;
     toast(`Services de ${allMaisons.find(x=>x.id===maisId)?.nom||maisId} mis à jour`, 'success');
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function saveMentionLegale(maisId) {
+  const val = document.getElementById(`mention-legale-${maisId}`).value.trim();
+  try {
+    await sbUpdate('dl_maisons', maisId, { mention_legale: val });
+    const m = allMaisons.find(x => x.id === maisId);
+    if (m) m.mention_legale = val;
+    toast('Mention légale enregistrée', 'success');
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
 
@@ -3731,6 +4334,26 @@ async function patchMaisonsServices() {
       }
     } catch(e) { /* silencieux */ }
   }
+}
+
+async function patchCotisationRestaurant() {
+  // Ajoute la prestation "Cotisation Restaurant" pour chaque maison qui ne l'a pas encore
+  try {
+    const maisons = await sbSelect('dl_maisons', '?select=id');
+    const y = new Date().getFullYear();
+    for (const m of maisons) {
+      const existing = await sbSelect('dl_carte', `?maison_id=eq.${m.id}&libelle=eq.Cotisation Restaurant&limit=1`);
+      if (existing && existing.length) continue;
+      await sbInsert('dl_carte', {
+        maison_id: m.id,
+        type_client: 'resident',
+        libelle: 'Cotisation Restaurant',
+        prix1: 12.94, prix2: null, tva: 10,
+        mois_debut: y + '-01',
+        mois_fin:   y + '-12',
+      }).catch(()=>{});
+    }
+  } catch(e) { /* silencieux */ }
 }
 
 async function seedGardienSaisie() {
@@ -4285,6 +4908,7 @@ window.addEventListener('load', async () => {
         await seedLMDResidents();
         await seedGardienSaisie();
         await patchMaisonsServices();
+        await patchCotisationRestaurant();
       }
     } catch(e) {
       sessionStorage.removeItem('dl_user');
@@ -4354,6 +4978,7 @@ const CARTE_DEFAULT = [
   { type:'resident', libelle:'Repas Invité tarif réduit',                prix1:15.58,  prix2:null, tva:10 },
   { type:'resident', libelle:'Repas Invité Enfant',                      prix1:12.00,  prix2:null, tva:10 },
   { type:'resident', libelle:'Repas amélioré',                           prix1:1.50,   prix2:null, tva:10 },
+  { type:'resident', libelle:'Cotisation Restaurant',                    prix1:12.94,  prix2:null, tva:10 },
   { type:'resident', libelle:'Portage repas',                            prix1:2.00,   prix2:null, tva:10 },
   { type:'resident', libelle:'Plateau à emporter',                       prix1:0.00,   prix2:null, tva:10 },
   { type:'resident', libelle:'Potage (1L)',                              prix1:2.20,   prix2:null, tva:10 },
@@ -4380,6 +5005,7 @@ let allMaisons = [];
 let allResidents = [];
 let allCarte = [];
 let seuilN = 15;
+let seuilR = 12;
 let joursPotage = [2, 5]; // mardi=2, vendredi=5 par défaut (0=dim,1=lun,...,6=sam)
 let confirmResolve = null;
 
@@ -4656,6 +5282,496 @@ function showPage(name) {
   if (name === 'feuille-mh') initMH();
   if (name === 'feuille-chef') initChef();
   if (name === 'export-csv') initCSV();
+  if (name === 'facturation') initFacturation();
+}
+
+// =============================
+// FACTURATION (Lot 2)
+// =============================
+
+let factCurrentResident = null; // résident sélectionné (objet complet)
+let factCurrentMois = null;     // mois facturé sélectionné (YYYY-MM)
+let factLastKey = null;         // mémorise resident_id+mois de la dernière génération (anti-fuite)
+let factEvenements = [];        // événements (jours off / hospi) du résident pour le mois facturé, chargés/édités en mémoire
+
+async function initFacturation() {
+  await populateFactResidents();
+  populateFactMois();
+  resetFacturation();
+}
+
+async function populateFactResidents() {
+  const sel = document.getElementById('fact-resident');
+  const cur = sel.value;
+  try {
+    const data = await sbSelect('dl_residents', `?maison_id=eq.${currentMaison.id}&order=nom`);
+    allResidents = data;
+  } catch(e) { allResidents = []; }
+
+  // Seuls les résidents non-NR sont facturables
+  const facturables = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+
+  sel.innerHTML = '<option value="">— Choisir un résident —</option>';
+  for (const r of facturables) {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = `${r.nom} ${r.prenom||''} (Appt. ${r.appt||'—'})`;
+    sel.appendChild(opt);
+  }
+  if (cur && facturables.find(r => r.id == cur)) sel.value = cur;
+}
+
+function populateFactMois() {
+  const sel = document.getElementById('fact-mois');
+  const cur = sel.value;
+  const today = new Date();
+  const MOIS_LONG_LOCAL = MOIS_LONG;
+  let html = '';
+  // Les 13 derniers mois écoulés (le mois précédent en premier, par défaut sélectionné)
+  for (let i = 1; i <= 13; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const moisStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label = `${MOIS_LONG_LOCAL[d.getMonth()]} ${d.getFullYear()}`;
+    const selected = (i === 1) ? 'selected' : '';
+    html += `<option value="${moisStr}" ${selected}>${label}</option>`;
+  }
+  sel.innerHTML = html;
+  if (cur) sel.value = cur;
+}
+
+function onFactResidentChange() {
+  const id = document.getElementById('fact-resident').value;
+  factCurrentResident = allResidents.find(r => r.id == id) || null;
+  loadFactSavedList();
+}
+
+function onFactMoisChange() {
+  factCurrentMois = document.getElementById('fact-mois').value;
+  loadFactSavedList();
+}
+
+function resetFacturation() {
+  document.getElementById('fact-output').innerHTML = '';
+  factLastKey = null;
+  factEvenements = [];
+}
+
+// ========== Calendrier événements générique (Jours off / Hospitalisation) ==========
+let evcalViewDate = new Date();
+let evcalMode = null;      // 'single' (jours off) | 'range' (hospitalisation)
+let evcalRangeStart = null; // pour le mode range : 1er clic = début
+let evcalCallback = null;   // fonction appelée avec la date (ou plage) choisie
+
+function openEvCal(triggerEl, mode, baseMonthDate, callback) {
+  evcalMode = mode;
+  evcalRangeStart = null;
+  evcalCallback = callback;
+  evcalViewDate = baseMonthDate ? new Date(baseMonthDate) : new Date();
+
+  // Fermer un éventuel popup déjà ouvert
+  closeEvCal();
+
+  const popup = document.createElement('div');
+  popup.className = 'evcal-popup';
+  popup.id = 'evcal-popup';
+  document.body.appendChild(popup);
+
+  // Positionner sous le bouton déclencheur
+  const rect = triggerEl.getBoundingClientRect();
+  popup.style.top = (window.scrollY + rect.bottom + 6) + 'px';
+  popup.style.left = (window.scrollX + rect.left) + 'px';
+
+  renderEvCal();
+
+  // Fermer si clic en dehors
+  setTimeout(() => {
+    document.addEventListener('click', evcalOutsideClickHandler);
+  }, 0);
+}
+
+function evcalOutsideClickHandler(e) {
+  const popup = document.getElementById('evcal-popup');
+  if (popup && !popup.contains(e.target)) {
+    closeEvCal();
+  }
+}
+
+function closeEvCal() {
+  const popup = document.getElementById('evcal-popup');
+  if (popup) popup.remove();
+  document.removeEventListener('click', evcalOutsideClickHandler);
+}
+
+function renderEvCal() {
+  const popup = document.getElementById('evcal-popup');
+  if (!popup) return;
+  const year = evcalViewDate.getFullYear();
+  const month = evcalViewDate.getMonth();
+  const monthLabel = MOIS_LONG[month] + ' ' + year;
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+  const todayStr = fmtDateISO(new Date());
+
+  let html = `
+    <div class="evcal-header">
+      <button onclick="evcalNavigate(-1)" type="button">‹</button>
+      <span class="evcal-month-label">${monthLabel}</span>
+      <button onclick="evcalNavigate(1)" type="button">›</button>
+    </div>
+    <table class="evcal-grid">
+      <thead><tr><th>L</th><th>M</th><th>M</th><th>J</th><th>V</th><th>S</th><th>D</th></tr></thead>
+      <tbody>`;
+
+  let cursor = new Date(startMonday);
+  for (let w = 0; w < 6; w++) {
+    html += '<tr>';
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(cursor);
+      const dayStr = fmtDateISO(day);
+      const otherMonth = day.getMonth() !== month;
+      let cls = otherMonth ? 'evcal-other-month' : 'evcal-day';
+
+      if (!otherMonth && evcalMode === 'range' && evcalRangeStart) {
+        if (dayStr === evcalRangeStart) cls += ' evcal-selected';
+        else if (dayStr > evcalRangeStart) cls += ''; // sera affiné au survol, simplifié ici
+      }
+
+      const onclick = otherMonth ? '' : `onclick="evcalDayClick('${dayStr}')"`;
+      html += `<td class="${cls}" ${onclick}>${day.getDate()}</td>`;
+      cursor = addDays(cursor, 1);
+    }
+    html += '</tr>';
+    if (cursor.getMonth() !== month && w >= 4) break;
+  }
+
+  html += `</tbody></table>
+    <div class="evcal-footer">
+      ${evcalMode === 'range' && evcalRangeStart ? `<span style="font-size:11px;color:var(--gris-mid)">Début : ${fmtDateFr(evcalRangeStart)} — cliquez la date de fin</span>` : ''}
+      <button type="button" onclick="closeEvCal()">Annuler</button>
+    </div>`;
+
+  popup.innerHTML = html;
+}
+
+function evcalNavigate(delta) {
+  evcalViewDate = new Date(evcalViewDate.getFullYear(), evcalViewDate.getMonth() + delta, 1);
+  renderEvCal();
+}
+
+function evcalDayClick(dayStr) {
+  if (evcalMode === 'single') {
+    evcalCallback(dayStr, null);
+    closeEvCal();
+  } else if (evcalMode === 'range') {
+    if (!evcalRangeStart) {
+      evcalRangeStart = dayStr;
+      renderEvCal();
+    } else {
+      let debut = evcalRangeStart, fin = dayStr;
+      if (fin < debut) { [debut, fin] = [fin, debut]; } // garantir debut <= fin
+      evcalCallback(debut, fin);
+      closeEvCal();
+    }
+  }
+}
+
+function fmtDateFr(d) {
+  if (!d) return '';
+  const dt = (typeof d === 'string') ? new Date(d + 'T00:00:00') : d;
+  return `${String(dt.getDate()).padStart(2,'0')} ${MOIS_LONG[dt.getMonth()]} ${dt.getFullYear()}`;
+}
+
+async function genererFacture() {
+  const resId = document.getElementById('fact-resident').value;
+  const mois  = document.getElementById('fact-mois').value;
+  if (!resId) { toast('Veuillez choisir un résident','error'); return; }
+  if (!mois)  { toast('Veuillez choisir un mois','error'); return; }
+
+  const res = allResidents.find(r => r.id == resId);
+  if (!res) { toast('Résident introuvable','error'); return; }
+
+  const nouvelleCle = `${resId}-${mois}`;
+  const memeFacture = (factLastKey === nouvelleCle);
+
+  factCurrentResident = res;
+  factCurrentMois = mois;
+  factLastKey = nouvelleCle;
+
+  const [annee, moisNum] = mois.split('-').map(Number);
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  // Charger les événements (jours off / hospi) déjà enregistrés pour CE résident et CE mois
+  // (uniquement si on change de résident/mois — sinon on garde les éventuelles modifications en cours)
+  if (!memeFacture) {
+    try {
+      factEvenements = await sbSelect('dl_evenements',
+        `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&mois=eq.${mois}&order=date_debut`);
+    } catch(e) { factEvenements = []; }
+    try {
+      const cfgRA = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${mois}&limit=1`);
+      factJoursAmeliore = (cfgRA && cfgRA.length) ? (cfgRA[0].jours || []) : [];
+    } catch(e) { factJoursAmeliore = []; }
+  }
+
+  // ===== SECTION 1 : informations résident =====
+  const nomPrenom = `${res.nom} ${res.prenom||''}`.trim();
+  const nbResidents = res.nb_residents || 1;
+  const categorie = res.categorie || '—';
+  const dateEntree = res.date_entree ? fmtDateFr(res.date_entree) : '—';
+  const dateSortie = res.date_sortie ? fmtDateFr(res.date_sortie) : '—';
+
+  let html = `<div class="print-doc" id="fact-print-content">
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px;background:#fafafa">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Mois :</strong> <span style="color:#c0392b">${moisLabel}</span></div>
+          <div><strong>Résident :</strong> <span style="color:#c0392b">${nomPrenom.toUpperCase()}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Appt. :</strong> <span style="color:#2980b9">${res.appt||'—'}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Nb Résidents :</strong> <span style="color:#2980b9">${nbResidents}</span></div>
+          <div><strong>Catégorie :</strong> <span style="color:#2980b9">${categorie}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Date d'entrée :</strong> <span style="color:#2980b9">${dateEntree}</span></div>
+          <div><strong>Date de sortie :</strong> <span style="color:#2980b9">${dateSortie}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px" id="fact-evenements-zone">
+      <div style="font-weight:700;font-size:14px;margin-bottom:12px">Événements</div>
+      <div style="margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600">Jours off</span>
+        <button type="button" class="evcal-add-btn no-print" id="btn-add-joursoff"
+                onclick="onAddJourOff(this)" title="Ajouter un jour off">+</button>
+        <span id="chips-joursoff" style="margin-left:6px"></span>
+      </div>
+      <div style="margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600">Hospitalisation</span>
+        <button type="button" class="evcal-add-btn no-print" id="btn-add-hospi"
+                onclick="onAddHospi(this)" title="Ajouter une période d'hospitalisation">+</button>
+        <span id="chips-hospi" style="margin-left:6px"></span>
+      </div>
+      <div>
+        <span style="font-size:13px;font-weight:600">Jours repas amélioré (paramètre du mois)</span>
+        <button type="button" class="btn btn-secondary btn-sm no-print" style="margin-left:8px"
+                onclick="openRepasAmelioreModal()">📅 Paramétrer</button>
+        <span id="chips-repas-ameliore" style="margin-left:6px;font-size:12px;color:var(--gris-mid)"></span>
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:24px;color:var(--gris-mid);border:1px dashed var(--gris-clair);border-radius:8px">
+      Section Services à venir...
+    </div>
+  </div>`;
+
+  document.getElementById('fact-output').innerHTML = html;
+  renderFactEvenements();
+}
+
+function renderFactEvenements() {
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  const nbJoursMois = new Date(annee, moisNum, 0).getDate();
+
+  const offs = factEvenements.filter(e => e.type === 'off');
+  const hospis = factEvenements.filter(e => e.type === 'hospi');
+
+  const chipsRA = document.getElementById('chips-repas-ameliore');
+  if (chipsRA) {
+    if (factJoursAmeliore && factJoursAmeliore.length) {
+      chipsRA.textContent = `${factJoursAmeliore.length} jour(s) paramétré(s) : ${factJoursAmeliore.sort((a,b)=>a-b).join(', ')}`;
+    } else {
+      chipsRA.textContent = 'Aucun jour paramétré';
+    }
+  }
+
+  const chipsOff = document.getElementById('chips-joursoff');
+  if (chipsOff) {
+    chipsOff.innerHTML = offs.map(e => `
+      <span class="evchip evchip-off">${fmtDateFr(e.date_debut)}
+        <button type="button" onclick="removeFactEvenement('${e.date_debut}','off')" title="Retirer">✕</button>
+      </span>`).join('');
+  }
+
+  const chipsHospi = document.getElementById('chips-hospi');
+  if (chipsHospi) {
+    chipsHospi.innerHTML = hospis.map(e => {
+      const label = (e.date_debut === e.date_fin)
+        ? fmtDateFr(e.date_debut)
+        : `${fmtDateFr(e.date_debut)} → ${fmtDateFr(e.date_fin)}`;
+      return `<span class="evchip evchip-hospi">${label}
+        <button type="button" onclick="removeFactEvenement('${e.date_debut}','hospi')" title="Retirer">✕</button>
+      </span>`;
+    }).join('');
+  }
+
+  // Désactiver le bouton + Jours off si la limite de 10 est atteinte
+  const btnOff = document.getElementById('btn-add-joursoff');
+  if (btnOff) btnOff.disabled = (offs.length >= 10);
+}
+
+function onAddJourOff(btnEl) {
+  const offs = factEvenements.filter(e => e.type === 'off');
+  if (offs.length >= 10) { toast('Maximum 10 jours off par mois','error'); return; }
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  openEvCal(btnEl, 'single', new Date(annee, moisNum-1, 1), (dateStr) => {
+    // Éviter les doublons
+    if (factEvenements.some(e => e.type === 'off' && e.date_debut === dateStr)) {
+      toast('Ce jour est déjà enregistré','info'); return;
+    }
+    factEvenements.push({ type:'off', date_debut: dateStr, date_fin: dateStr, _new: true });
+    renderFactEvenements();
+  });
+}
+
+function onAddHospi(btnEl) {
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  openEvCal(btnEl, 'range', new Date(annee, moisNum-1, 1), (debut, fin) => {
+    factEvenements.push({ type:'hospi', date_debut: debut, date_fin: fin, _new: true });
+    renderFactEvenements();
+  });
+}
+
+function removeFactEvenement(dateDebut, type) {
+  factEvenements = factEvenements.filter(e => !(e.type === type && e.date_debut === dateDebut));
+  renderFactEvenements();
+}
+
+// ========== Popup "Jours repas amélioré" — paramètre persistant par maison + mois ==========
+let factJoursAmeliore = []; // jours du mois (1-31) cochés, en mémoire pendant l'édition de la popup
+
+async function openRepasAmelioreModal() {
+  if (!factCurrentMois) { toast('Choisissez d\'abord un mois','error'); return; }
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  const nbJours = new Date(annee, moisNum, 0).getDate();
+
+  // Charger la configuration existante pour ce mois (pré-remplissage), sinon reprendre le mois précédent
+  try {
+    const cfg = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${factCurrentMois}&limit=1`);
+    if (cfg && cfg.length) {
+      factJoursAmeliore = cfg[0].jours || [];
+    } else {
+      // Pré-remplissage avec le mois précédent si rien n'existe encore pour ce mois
+      const moisPrec = new Date(annee, moisNum-2, 1);
+      const moisPrecStr = `${moisPrec.getFullYear()}-${String(moisPrec.getMonth()+1).padStart(2,'0')}`;
+      const cfgPrec = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${moisPrecStr}&limit=1`);
+      factJoursAmeliore = (cfgPrec && cfgPrec.length) ? (cfgPrec[0].jours || []) : [];
+    }
+  } catch(e) { factJoursAmeliore = []; }
+
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  // Construire la grille de cases à cocher (style calendrier, 7 colonnes)
+  const firstOfMonth = new Date(annee, moisNum-1, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+  let grid = '';
+  let cursor = new Date(startMonday);
+  for (let w = 0; w < 6; w++) {
+    grid += '<tr>';
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(cursor);
+      const otherMonth = day.getMonth() !== (moisNum-1);
+      if (otherMonth) {
+        grid += '<td style="color:#ccc;padding:6px"></td>';
+      } else {
+        const num = day.getDate();
+        const checked = factJoursAmeliore.includes(num) ? 'checked' : '';
+        grid += `<td style="padding:4px;text-align:center">
+          <label style="display:flex;flex-direction:column;align-items:center;cursor:pointer;font-size:11px">
+            <input type="checkbox" value="${num}" class="ra-day-cb" ${checked} style="margin-bottom:2px">
+            ${num}
+          </label>
+        </td>`;
+      }
+      cursor = addDays(cursor, 1);
+    }
+    grid += '</tr>';
+    if (cursor.getMonth() !== (moisNum-1) && w >= 4) break;
+  }
+
+  const modalHtml = `
+    <div id="ra-modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this) closeRepasAmelioreModal()">
+      <div style="background:white;border-radius:10px;padding:20px 24px;max-width:380px;box-shadow:0 12px 40px rgba(0,0,0,.25)">
+        <div style="font-weight:700;font-size:15px;margin-bottom:4px">Jours repas amélioré — ${moisLabel}</div>
+        <div style="font-size:12px;color:var(--gris-mid);margin-bottom:14px">Cochez les jours du mois concernés par le tarif "repas amélioré". Ce paramètre est commun à tous les résidents de la maison pour ce mois.</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr><th style="font-size:10px;color:var(--gris-mid)">L</th><th style="font-size:10px;color:var(--gris-mid)">M</th><th style="font-size:10px;color:var(--gris-mid)">M</th><th style="font-size:10px;color:var(--gris-mid)">J</th><th style="font-size:10px;color:var(--gris-mid)">V</th><th style="font-size:10px;color:var(--gris-mid)">S</th><th style="font-size:10px;color:var(--gris-mid)">D</th></tr></thead>
+          <tbody>${grid}</tbody>
+        </table>
+        <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:10px">
+          <button class="btn btn-secondary" onclick="closeRepasAmelioreModal()">Annuler</button>
+          <button class="btn btn-primary" onclick="saveRepasAmeliore()">Enregistrer</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function closeRepasAmelioreModal() {
+  const overlay = document.getElementById('ra-modal-overlay');
+  if (overlay) overlay.remove();
+}
+
+async function saveRepasAmeliore() {
+  const jours = Array.from(document.querySelectorAll('.ra-day-cb:checked')).map(cb => parseInt(cb.value));
+  try {
+    await sbUpsert('dl_repas_ameliore',
+      { maison_id: currentMaison.id, mois: factCurrentMois, jours, updated_at: new Date().toISOString() },
+      'maison_id,mois');
+    factJoursAmeliore = jours;
+    closeRepasAmelioreModal();
+    renderFactEvenements();
+    toast('Jours repas amélioré enregistrés','success');
+  } catch(e) {
+    toast('Erreur: '+e.message,'error');
+  }
+}
+
+async function loadFactSavedList() {
+  const tbody = document.getElementById('fact-saved-list');
+  if (!tbody) return;
+  const resId = document.getElementById('fact-resident').value;
+  if (!resId) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Sélectionnez un résident pour voir ses factures</td></tr>';
+    return;
+  }
+  try {
+    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&order=mois.desc&limit=30`);
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune facture enregistrée pour ce résident</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(f => {
+      const [a,m] = f.mois.split('-').map(Number);
+      const moisLabel = `${MOIS_LONG[m-1]} ${a}`;
+      const upd = f.updated_at ? new Date(f.updated_at) : null;
+      const updFmt = upd ? `${String(upd.getDate()).padStart(2,'0')}/${String(upd.getMonth()+1).padStart(2,'0')}/${upd.getFullYear()} ${String(upd.getHours()).padStart(2,'0')}:${String(upd.getMinutes()).padStart(2,'0')}` : '—';
+      const statutBadge = f.statut === 'validee'
+        ? '<span class="badge badge-blue">Validée</span>'
+        : '<span class="badge badge-orange">Créée</span>';
+      return `<tr>
+        <td><code>${f.numero}</code></td>
+        <td>${factCurrentResident ? factCurrentResident.nom+' '+(factCurrentResident.prenom||'') : ''}</td>
+        <td>${moisLabel}</td>
+        <td>${f.montant_total != null ? fmt2(f.montant_total)+' €' : '—'}</td>
+        <td>${statutBadge}</td>
+        <td style="font-size:12px;color:var(--gris-mid)">${updFmt}</td>
+        <td><button class="btn btn-secondary btn-sm" title="Reprendre cette facture" onclick="reprendreFacture(${f.id})">✏️</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--rouge);padding:16px">Erreur: ${e.message}</td></tr>`;
+  }
+}
+
+function reprendreFacture(factureId) {
+  // Sera complété à l'étape F (génération + persistance complète)
+  toast('Reprise de facture — à venir', 'info');
 }
 
 // =============================
@@ -4975,6 +6091,10 @@ async function loadCarte() {
     if (cfg.length) seuilN = parseInt(cfg[0].valeur)||15;
     document.getElementById('seuil-n').value = seuilN;
 
+    const cfgR = await sbSelect('dl_config', `?cle=eq.seuil_r&maison_id=eq.${currentMaison.id}&limit=1`);
+    if (cfgR.length) seuilR = parseInt(cfgR[0].valeur)||12;
+    document.getElementById('seuil-r').value = seuilR;
+
     const cfgPot = await sbSelect('dl_config', `?cle=eq.jours_potage&maison_id=eq.${currentMaison.id}&limit=1`);
     if (cfgPot.length) {
       try { joursPotage = JSON.parse(cfgPot[0].valeur); } catch(e) {}
@@ -5045,6 +6165,14 @@ async function saveSeuilN() {
   try {
     await sbUpsert('dl_config', { maison_id: currentMaison.id, cle:'seuil_n', valeur: String(seuilN) }, 'maison_id,cle');
     toast('Seuil N mis à jour', 'success');
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function saveSeuilR() {
+  seuilR = parseInt(document.getElementById('seuil-r').value) || 12;
+  try {
+    await sbUpsert('dl_config', { maison_id: currentMaison.id, cle:'seuil_r', valeur: String(seuilR) }, 'maison_id,cle');
+    toast('Seuil R mis à jour', 'success');
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
 
@@ -6658,6 +7786,13 @@ async function loadAdmin() {
       <td><code>${m.login}</code></td>
       <td><div style="display:flex;gap:8px;flex-wrap:wrap">${checks}</div></td>
       <td><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:${m.couleur||'#ccc'}"></span> ${m.couleur||''}</td>
+      <td>
+        <div style="display:flex;gap:4px;align-items:center">
+          <input type="text" id="mention-legale-${m.id}" value="${(m.mention_legale||'').replace(/"/g,'&quot;')}"
+                 placeholder="Ex: Chez Daddy..., adresse, SIRET" style="width:220px;font-size:11px;padding:4px 6px;border:1px solid var(--gris);border-radius:4px">
+          <button class="btn btn-secondary btn-sm" onclick="saveMentionLegale('${m.id}')" title="Enregistrer">💾</button>
+        </div>
+      </td>
       <td><button class="btn btn-danger btn-sm" onclick="deleteMaison('${m.id}')">Supprimer</button></td>
     </tr>`;
   }).join('');
@@ -6714,13 +7849,14 @@ async function createMaison() {
   if (document.getElementById('new-svc-loc').checked)   svcs.push('loc');
   if (document.getElementById('new-svc-adh').checked)   svcs.push('adh');
 
+  const mention = document.getElementById('new-maison-mention').value.trim();
   if (!nom || !login || !mdp) { toast('Nom, login et MDP obligatoires','error'); return; }
 
   const id = nom.toUpperCase().replace(/[^A-Z0-9]/g,'').substring(0,5) + Date.now().toString().slice(-3);
   try {
-    await sbInsert('dl_maisons', { id, nom, ville, adresse:adr, login, mdp, couleur:color, services:svcs, actif:true });
+    await sbInsert('dl_maisons', { id, nom, ville, adresse:adr, mention_legale:mention, login, mdp, couleur:color, services:svcs, actif:true });
     toast('Maison créée','success');
-    ['nom','ville','adresse','login','mdp'].forEach(f => document.getElementById('new-maison-'+f).value='');
+    ['nom','ville','adresse','mention','login','mdp'].forEach(f => document.getElementById('new-maison-'+f).value='');
     await loadMaisons();
     populateMaisonSelector();
     loadAdmin();
@@ -6737,6 +7873,16 @@ async function saveServicesMaison(maisId) {
     const m = allMaisons.find(x => x.id === maisId);
     if (m) m.services = svcs;
     toast(`Services de ${allMaisons.find(x=>x.id===maisId)?.nom||maisId} mis à jour`, 'success');
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function saveMentionLegale(maisId) {
+  const val = document.getElementById(`mention-legale-${maisId}`).value.trim();
+  try {
+    await sbUpdate('dl_maisons', maisId, { mention_legale: val });
+    const m = allMaisons.find(x => x.id === maisId);
+    if (m) m.mention_legale = val;
+    toast('Mention légale enregistrée', 'success');
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
 
@@ -7101,6 +8247,26 @@ async function patchMaisonsServices() {
       }
     } catch(e) { /* silencieux */ }
   }
+}
+
+async function patchCotisationRestaurant() {
+  // Ajoute la prestation "Cotisation Restaurant" pour chaque maison qui ne l'a pas encore
+  try {
+    const maisons = await sbSelect('dl_maisons', '?select=id');
+    const y = new Date().getFullYear();
+    for (const m of maisons) {
+      const existing = await sbSelect('dl_carte', `?maison_id=eq.${m.id}&libelle=eq.Cotisation Restaurant&limit=1`);
+      if (existing && existing.length) continue;
+      await sbInsert('dl_carte', {
+        maison_id: m.id,
+        type_client: 'resident',
+        libelle: 'Cotisation Restaurant',
+        prix1: 12.94, prix2: null, tva: 10,
+        mois_debut: y + '-01',
+        mois_fin:   y + '-12',
+      }).catch(()=>{});
+    }
+  } catch(e) { /* silencieux */ }
 }
 
 async function seedGardienSaisie() {
@@ -7655,6 +8821,7 @@ window.addEventListener('load', async () => {
         await seedLMDResidents();
         await seedGardienSaisie();
         await patchMaisonsServices();
+        await patchCotisationRestaurant();
       }
     } catch(e) {
       sessionStorage.removeItem('dl_user');
@@ -7724,6 +8891,7 @@ const CARTE_DEFAULT = [
   { type:'resident', libelle:'Repas Invité tarif réduit',                prix1:15.58,  prix2:null, tva:10 },
   { type:'resident', libelle:'Repas Invité Enfant',                      prix1:12.00,  prix2:null, tva:10 },
   { type:'resident', libelle:'Repas amélioré',                           prix1:1.50,   prix2:null, tva:10 },
+  { type:'resident', libelle:'Cotisation Restaurant',                    prix1:12.94,  prix2:null, tva:10 },
   { type:'resident', libelle:'Portage repas',                            prix1:2.00,   prix2:null, tva:10 },
   { type:'resident', libelle:'Plateau à emporter',                       prix1:0.00,   prix2:null, tva:10 },
   { type:'resident', libelle:'Potage (1L)',                              prix1:2.20,   prix2:null, tva:10 },
@@ -7750,6 +8918,7 @@ let allMaisons = [];
 let allResidents = [];
 let allCarte = [];
 let seuilN = 15;
+let seuilR = 12;
 let joursPotage = [2, 5]; // mardi=2, vendredi=5 par défaut (0=dim,1=lun,...,6=sam)
 let confirmResolve = null;
 
@@ -8026,6 +9195,496 @@ function showPage(name) {
   if (name === 'feuille-mh') initMH();
   if (name === 'feuille-chef') initChef();
   if (name === 'export-csv') initCSV();
+  if (name === 'facturation') initFacturation();
+}
+
+// =============================
+// FACTURATION (Lot 2)
+// =============================
+
+let factCurrentResident = null; // résident sélectionné (objet complet)
+let factCurrentMois = null;     // mois facturé sélectionné (YYYY-MM)
+let factLastKey = null;         // mémorise resident_id+mois de la dernière génération (anti-fuite)
+let factEvenements = [];        // événements (jours off / hospi) du résident pour le mois facturé, chargés/édités en mémoire
+
+async function initFacturation() {
+  await populateFactResidents();
+  populateFactMois();
+  resetFacturation();
+}
+
+async function populateFactResidents() {
+  const sel = document.getElementById('fact-resident');
+  const cur = sel.value;
+  try {
+    const data = await sbSelect('dl_residents', `?maison_id=eq.${currentMaison.id}&order=nom`);
+    allResidents = data;
+  } catch(e) { allResidents = []; }
+
+  // Seuls les résidents non-NR sont facturables
+  const facturables = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+
+  sel.innerHTML = '<option value="">— Choisir un résident —</option>';
+  for (const r of facturables) {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = `${r.nom} ${r.prenom||''} (Appt. ${r.appt||'—'})`;
+    sel.appendChild(opt);
+  }
+  if (cur && facturables.find(r => r.id == cur)) sel.value = cur;
+}
+
+function populateFactMois() {
+  const sel = document.getElementById('fact-mois');
+  const cur = sel.value;
+  const today = new Date();
+  const MOIS_LONG_LOCAL = MOIS_LONG;
+  let html = '';
+  // Les 13 derniers mois écoulés (le mois précédent en premier, par défaut sélectionné)
+  for (let i = 1; i <= 13; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const moisStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label = `${MOIS_LONG_LOCAL[d.getMonth()]} ${d.getFullYear()}`;
+    const selected = (i === 1) ? 'selected' : '';
+    html += `<option value="${moisStr}" ${selected}>${label}</option>`;
+  }
+  sel.innerHTML = html;
+  if (cur) sel.value = cur;
+}
+
+function onFactResidentChange() {
+  const id = document.getElementById('fact-resident').value;
+  factCurrentResident = allResidents.find(r => r.id == id) || null;
+  loadFactSavedList();
+}
+
+function onFactMoisChange() {
+  factCurrentMois = document.getElementById('fact-mois').value;
+  loadFactSavedList();
+}
+
+function resetFacturation() {
+  document.getElementById('fact-output').innerHTML = '';
+  factLastKey = null;
+  factEvenements = [];
+}
+
+// ========== Calendrier événements générique (Jours off / Hospitalisation) ==========
+let evcalViewDate = new Date();
+let evcalMode = null;      // 'single' (jours off) | 'range' (hospitalisation)
+let evcalRangeStart = null; // pour le mode range : 1er clic = début
+let evcalCallback = null;   // fonction appelée avec la date (ou plage) choisie
+
+function openEvCal(triggerEl, mode, baseMonthDate, callback) {
+  evcalMode = mode;
+  evcalRangeStart = null;
+  evcalCallback = callback;
+  evcalViewDate = baseMonthDate ? new Date(baseMonthDate) : new Date();
+
+  // Fermer un éventuel popup déjà ouvert
+  closeEvCal();
+
+  const popup = document.createElement('div');
+  popup.className = 'evcal-popup';
+  popup.id = 'evcal-popup';
+  document.body.appendChild(popup);
+
+  // Positionner sous le bouton déclencheur
+  const rect = triggerEl.getBoundingClientRect();
+  popup.style.top = (window.scrollY + rect.bottom + 6) + 'px';
+  popup.style.left = (window.scrollX + rect.left) + 'px';
+
+  renderEvCal();
+
+  // Fermer si clic en dehors
+  setTimeout(() => {
+    document.addEventListener('click', evcalOutsideClickHandler);
+  }, 0);
+}
+
+function evcalOutsideClickHandler(e) {
+  const popup = document.getElementById('evcal-popup');
+  if (popup && !popup.contains(e.target)) {
+    closeEvCal();
+  }
+}
+
+function closeEvCal() {
+  const popup = document.getElementById('evcal-popup');
+  if (popup) popup.remove();
+  document.removeEventListener('click', evcalOutsideClickHandler);
+}
+
+function renderEvCal() {
+  const popup = document.getElementById('evcal-popup');
+  if (!popup) return;
+  const year = evcalViewDate.getFullYear();
+  const month = evcalViewDate.getMonth();
+  const monthLabel = MOIS_LONG[month] + ' ' + year;
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+  const todayStr = fmtDateISO(new Date());
+
+  let html = `
+    <div class="evcal-header">
+      <button onclick="evcalNavigate(-1)" type="button">‹</button>
+      <span class="evcal-month-label">${monthLabel}</span>
+      <button onclick="evcalNavigate(1)" type="button">›</button>
+    </div>
+    <table class="evcal-grid">
+      <thead><tr><th>L</th><th>M</th><th>M</th><th>J</th><th>V</th><th>S</th><th>D</th></tr></thead>
+      <tbody>`;
+
+  let cursor = new Date(startMonday);
+  for (let w = 0; w < 6; w++) {
+    html += '<tr>';
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(cursor);
+      const dayStr = fmtDateISO(day);
+      const otherMonth = day.getMonth() !== month;
+      let cls = otherMonth ? 'evcal-other-month' : 'evcal-day';
+
+      if (!otherMonth && evcalMode === 'range' && evcalRangeStart) {
+        if (dayStr === evcalRangeStart) cls += ' evcal-selected';
+        else if (dayStr > evcalRangeStart) cls += ''; // sera affiné au survol, simplifié ici
+      }
+
+      const onclick = otherMonth ? '' : `onclick="evcalDayClick('${dayStr}')"`;
+      html += `<td class="${cls}" ${onclick}>${day.getDate()}</td>`;
+      cursor = addDays(cursor, 1);
+    }
+    html += '</tr>';
+    if (cursor.getMonth() !== month && w >= 4) break;
+  }
+
+  html += `</tbody></table>
+    <div class="evcal-footer">
+      ${evcalMode === 'range' && evcalRangeStart ? `<span style="font-size:11px;color:var(--gris-mid)">Début : ${fmtDateFr(evcalRangeStart)} — cliquez la date de fin</span>` : ''}
+      <button type="button" onclick="closeEvCal()">Annuler</button>
+    </div>`;
+
+  popup.innerHTML = html;
+}
+
+function evcalNavigate(delta) {
+  evcalViewDate = new Date(evcalViewDate.getFullYear(), evcalViewDate.getMonth() + delta, 1);
+  renderEvCal();
+}
+
+function evcalDayClick(dayStr) {
+  if (evcalMode === 'single') {
+    evcalCallback(dayStr, null);
+    closeEvCal();
+  } else if (evcalMode === 'range') {
+    if (!evcalRangeStart) {
+      evcalRangeStart = dayStr;
+      renderEvCal();
+    } else {
+      let debut = evcalRangeStart, fin = dayStr;
+      if (fin < debut) { [debut, fin] = [fin, debut]; } // garantir debut <= fin
+      evcalCallback(debut, fin);
+      closeEvCal();
+    }
+  }
+}
+
+function fmtDateFr(d) {
+  if (!d) return '';
+  const dt = (typeof d === 'string') ? new Date(d + 'T00:00:00') : d;
+  return `${String(dt.getDate()).padStart(2,'0')} ${MOIS_LONG[dt.getMonth()]} ${dt.getFullYear()}`;
+}
+
+async function genererFacture() {
+  const resId = document.getElementById('fact-resident').value;
+  const mois  = document.getElementById('fact-mois').value;
+  if (!resId) { toast('Veuillez choisir un résident','error'); return; }
+  if (!mois)  { toast('Veuillez choisir un mois','error'); return; }
+
+  const res = allResidents.find(r => r.id == resId);
+  if (!res) { toast('Résident introuvable','error'); return; }
+
+  const nouvelleCle = `${resId}-${mois}`;
+  const memeFacture = (factLastKey === nouvelleCle);
+
+  factCurrentResident = res;
+  factCurrentMois = mois;
+  factLastKey = nouvelleCle;
+
+  const [annee, moisNum] = mois.split('-').map(Number);
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  // Charger les événements (jours off / hospi) déjà enregistrés pour CE résident et CE mois
+  // (uniquement si on change de résident/mois — sinon on garde les éventuelles modifications en cours)
+  if (!memeFacture) {
+    try {
+      factEvenements = await sbSelect('dl_evenements',
+        `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&mois=eq.${mois}&order=date_debut`);
+    } catch(e) { factEvenements = []; }
+    try {
+      const cfgRA = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${mois}&limit=1`);
+      factJoursAmeliore = (cfgRA && cfgRA.length) ? (cfgRA[0].jours || []) : [];
+    } catch(e) { factJoursAmeliore = []; }
+  }
+
+  // ===== SECTION 1 : informations résident =====
+  const nomPrenom = `${res.nom} ${res.prenom||''}`.trim();
+  const nbResidents = res.nb_residents || 1;
+  const categorie = res.categorie || '—';
+  const dateEntree = res.date_entree ? fmtDateFr(res.date_entree) : '—';
+  const dateSortie = res.date_sortie ? fmtDateFr(res.date_sortie) : '—';
+
+  let html = `<div class="print-doc" id="fact-print-content">
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px;background:#fafafa">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Mois :</strong> <span style="color:#c0392b">${moisLabel}</span></div>
+          <div><strong>Résident :</strong> <span style="color:#c0392b">${nomPrenom.toUpperCase()}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Appt. :</strong> <span style="color:#2980b9">${res.appt||'—'}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Nb Résidents :</strong> <span style="color:#2980b9">${nbResidents}</span></div>
+          <div><strong>Catégorie :</strong> <span style="color:#2980b9">${categorie}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Date d'entrée :</strong> <span style="color:#2980b9">${dateEntree}</span></div>
+          <div><strong>Date de sortie :</strong> <span style="color:#2980b9">${dateSortie}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px" id="fact-evenements-zone">
+      <div style="font-weight:700;font-size:14px;margin-bottom:12px">Événements</div>
+      <div style="margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600">Jours off</span>
+        <button type="button" class="evcal-add-btn no-print" id="btn-add-joursoff"
+                onclick="onAddJourOff(this)" title="Ajouter un jour off">+</button>
+        <span id="chips-joursoff" style="margin-left:6px"></span>
+      </div>
+      <div style="margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600">Hospitalisation</span>
+        <button type="button" class="evcal-add-btn no-print" id="btn-add-hospi"
+                onclick="onAddHospi(this)" title="Ajouter une période d'hospitalisation">+</button>
+        <span id="chips-hospi" style="margin-left:6px"></span>
+      </div>
+      <div>
+        <span style="font-size:13px;font-weight:600">Jours repas amélioré (paramètre du mois)</span>
+        <button type="button" class="btn btn-secondary btn-sm no-print" style="margin-left:8px"
+                onclick="openRepasAmelioreModal()">📅 Paramétrer</button>
+        <span id="chips-repas-ameliore" style="margin-left:6px;font-size:12px;color:var(--gris-mid)"></span>
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:24px;color:var(--gris-mid);border:1px dashed var(--gris-clair);border-radius:8px">
+      Section Services à venir...
+    </div>
+  </div>`;
+
+  document.getElementById('fact-output').innerHTML = html;
+  renderFactEvenements();
+}
+
+function renderFactEvenements() {
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  const nbJoursMois = new Date(annee, moisNum, 0).getDate();
+
+  const offs = factEvenements.filter(e => e.type === 'off');
+  const hospis = factEvenements.filter(e => e.type === 'hospi');
+
+  const chipsRA = document.getElementById('chips-repas-ameliore');
+  if (chipsRA) {
+    if (factJoursAmeliore && factJoursAmeliore.length) {
+      chipsRA.textContent = `${factJoursAmeliore.length} jour(s) paramétré(s) : ${factJoursAmeliore.sort((a,b)=>a-b).join(', ')}`;
+    } else {
+      chipsRA.textContent = 'Aucun jour paramétré';
+    }
+  }
+
+  const chipsOff = document.getElementById('chips-joursoff');
+  if (chipsOff) {
+    chipsOff.innerHTML = offs.map(e => `
+      <span class="evchip evchip-off">${fmtDateFr(e.date_debut)}
+        <button type="button" onclick="removeFactEvenement('${e.date_debut}','off')" title="Retirer">✕</button>
+      </span>`).join('');
+  }
+
+  const chipsHospi = document.getElementById('chips-hospi');
+  if (chipsHospi) {
+    chipsHospi.innerHTML = hospis.map(e => {
+      const label = (e.date_debut === e.date_fin)
+        ? fmtDateFr(e.date_debut)
+        : `${fmtDateFr(e.date_debut)} → ${fmtDateFr(e.date_fin)}`;
+      return `<span class="evchip evchip-hospi">${label}
+        <button type="button" onclick="removeFactEvenement('${e.date_debut}','hospi')" title="Retirer">✕</button>
+      </span>`;
+    }).join('');
+  }
+
+  // Désactiver le bouton + Jours off si la limite de 10 est atteinte
+  const btnOff = document.getElementById('btn-add-joursoff');
+  if (btnOff) btnOff.disabled = (offs.length >= 10);
+}
+
+function onAddJourOff(btnEl) {
+  const offs = factEvenements.filter(e => e.type === 'off');
+  if (offs.length >= 10) { toast('Maximum 10 jours off par mois','error'); return; }
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  openEvCal(btnEl, 'single', new Date(annee, moisNum-1, 1), (dateStr) => {
+    // Éviter les doublons
+    if (factEvenements.some(e => e.type === 'off' && e.date_debut === dateStr)) {
+      toast('Ce jour est déjà enregistré','info'); return;
+    }
+    factEvenements.push({ type:'off', date_debut: dateStr, date_fin: dateStr, _new: true });
+    renderFactEvenements();
+  });
+}
+
+function onAddHospi(btnEl) {
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  openEvCal(btnEl, 'range', new Date(annee, moisNum-1, 1), (debut, fin) => {
+    factEvenements.push({ type:'hospi', date_debut: debut, date_fin: fin, _new: true });
+    renderFactEvenements();
+  });
+}
+
+function removeFactEvenement(dateDebut, type) {
+  factEvenements = factEvenements.filter(e => !(e.type === type && e.date_debut === dateDebut));
+  renderFactEvenements();
+}
+
+// ========== Popup "Jours repas amélioré" — paramètre persistant par maison + mois ==========
+let factJoursAmeliore = []; // jours du mois (1-31) cochés, en mémoire pendant l'édition de la popup
+
+async function openRepasAmelioreModal() {
+  if (!factCurrentMois) { toast('Choisissez d\'abord un mois','error'); return; }
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  const nbJours = new Date(annee, moisNum, 0).getDate();
+
+  // Charger la configuration existante pour ce mois (pré-remplissage), sinon reprendre le mois précédent
+  try {
+    const cfg = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${factCurrentMois}&limit=1`);
+    if (cfg && cfg.length) {
+      factJoursAmeliore = cfg[0].jours || [];
+    } else {
+      // Pré-remplissage avec le mois précédent si rien n'existe encore pour ce mois
+      const moisPrec = new Date(annee, moisNum-2, 1);
+      const moisPrecStr = `${moisPrec.getFullYear()}-${String(moisPrec.getMonth()+1).padStart(2,'0')}`;
+      const cfgPrec = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${moisPrecStr}&limit=1`);
+      factJoursAmeliore = (cfgPrec && cfgPrec.length) ? (cfgPrec[0].jours || []) : [];
+    }
+  } catch(e) { factJoursAmeliore = []; }
+
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  // Construire la grille de cases à cocher (style calendrier, 7 colonnes)
+  const firstOfMonth = new Date(annee, moisNum-1, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+  let grid = '';
+  let cursor = new Date(startMonday);
+  for (let w = 0; w < 6; w++) {
+    grid += '<tr>';
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(cursor);
+      const otherMonth = day.getMonth() !== (moisNum-1);
+      if (otherMonth) {
+        grid += '<td style="color:#ccc;padding:6px"></td>';
+      } else {
+        const num = day.getDate();
+        const checked = factJoursAmeliore.includes(num) ? 'checked' : '';
+        grid += `<td style="padding:4px;text-align:center">
+          <label style="display:flex;flex-direction:column;align-items:center;cursor:pointer;font-size:11px">
+            <input type="checkbox" value="${num}" class="ra-day-cb" ${checked} style="margin-bottom:2px">
+            ${num}
+          </label>
+        </td>`;
+      }
+      cursor = addDays(cursor, 1);
+    }
+    grid += '</tr>';
+    if (cursor.getMonth() !== (moisNum-1) && w >= 4) break;
+  }
+
+  const modalHtml = `
+    <div id="ra-modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this) closeRepasAmelioreModal()">
+      <div style="background:white;border-radius:10px;padding:20px 24px;max-width:380px;box-shadow:0 12px 40px rgba(0,0,0,.25)">
+        <div style="font-weight:700;font-size:15px;margin-bottom:4px">Jours repas amélioré — ${moisLabel}</div>
+        <div style="font-size:12px;color:var(--gris-mid);margin-bottom:14px">Cochez les jours du mois concernés par le tarif "repas amélioré". Ce paramètre est commun à tous les résidents de la maison pour ce mois.</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr><th style="font-size:10px;color:var(--gris-mid)">L</th><th style="font-size:10px;color:var(--gris-mid)">M</th><th style="font-size:10px;color:var(--gris-mid)">M</th><th style="font-size:10px;color:var(--gris-mid)">J</th><th style="font-size:10px;color:var(--gris-mid)">V</th><th style="font-size:10px;color:var(--gris-mid)">S</th><th style="font-size:10px;color:var(--gris-mid)">D</th></tr></thead>
+          <tbody>${grid}</tbody>
+        </table>
+        <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:10px">
+          <button class="btn btn-secondary" onclick="closeRepasAmelioreModal()">Annuler</button>
+          <button class="btn btn-primary" onclick="saveRepasAmeliore()">Enregistrer</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function closeRepasAmelioreModal() {
+  const overlay = document.getElementById('ra-modal-overlay');
+  if (overlay) overlay.remove();
+}
+
+async function saveRepasAmeliore() {
+  const jours = Array.from(document.querySelectorAll('.ra-day-cb:checked')).map(cb => parseInt(cb.value));
+  try {
+    await sbUpsert('dl_repas_ameliore',
+      { maison_id: currentMaison.id, mois: factCurrentMois, jours, updated_at: new Date().toISOString() },
+      'maison_id,mois');
+    factJoursAmeliore = jours;
+    closeRepasAmelioreModal();
+    renderFactEvenements();
+    toast('Jours repas amélioré enregistrés','success');
+  } catch(e) {
+    toast('Erreur: '+e.message,'error');
+  }
+}
+
+async function loadFactSavedList() {
+  const tbody = document.getElementById('fact-saved-list');
+  if (!tbody) return;
+  const resId = document.getElementById('fact-resident').value;
+  if (!resId) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Sélectionnez un résident pour voir ses factures</td></tr>';
+    return;
+  }
+  try {
+    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&order=mois.desc&limit=30`);
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune facture enregistrée pour ce résident</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(f => {
+      const [a,m] = f.mois.split('-').map(Number);
+      const moisLabel = `${MOIS_LONG[m-1]} ${a}`;
+      const upd = f.updated_at ? new Date(f.updated_at) : null;
+      const updFmt = upd ? `${String(upd.getDate()).padStart(2,'0')}/${String(upd.getMonth()+1).padStart(2,'0')}/${upd.getFullYear()} ${String(upd.getHours()).padStart(2,'0')}:${String(upd.getMinutes()).padStart(2,'0')}` : '—';
+      const statutBadge = f.statut === 'validee'
+        ? '<span class="badge badge-blue">Validée</span>'
+        : '<span class="badge badge-orange">Créée</span>';
+      return `<tr>
+        <td><code>${f.numero}</code></td>
+        <td>${factCurrentResident ? factCurrentResident.nom+' '+(factCurrentResident.prenom||'') : ''}</td>
+        <td>${moisLabel}</td>
+        <td>${f.montant_total != null ? fmt2(f.montant_total)+' €' : '—'}</td>
+        <td>${statutBadge}</td>
+        <td style="font-size:12px;color:var(--gris-mid)">${updFmt}</td>
+        <td><button class="btn btn-secondary btn-sm" title="Reprendre cette facture" onclick="reprendreFacture(${f.id})">✏️</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--rouge);padding:16px">Erreur: ${e.message}</td></tr>`;
+  }
+}
+
+function reprendreFacture(factureId) {
+  // Sera complété à l'étape F (génération + persistance complète)
+  toast('Reprise de facture — à venir', 'info');
 }
 
 // =============================
@@ -8345,6 +10004,10 @@ async function loadCarte() {
     if (cfg.length) seuilN = parseInt(cfg[0].valeur)||15;
     document.getElementById('seuil-n').value = seuilN;
 
+    const cfgR = await sbSelect('dl_config', `?cle=eq.seuil_r&maison_id=eq.${currentMaison.id}&limit=1`);
+    if (cfgR.length) seuilR = parseInt(cfgR[0].valeur)||12;
+    document.getElementById('seuil-r').value = seuilR;
+
     const cfgPot = await sbSelect('dl_config', `?cle=eq.jours_potage&maison_id=eq.${currentMaison.id}&limit=1`);
     if (cfgPot.length) {
       try { joursPotage = JSON.parse(cfgPot[0].valeur); } catch(e) {}
@@ -8415,6 +10078,14 @@ async function saveSeuilN() {
   try {
     await sbUpsert('dl_config', { maison_id: currentMaison.id, cle:'seuil_n', valeur: String(seuilN) }, 'maison_id,cle');
     toast('Seuil N mis à jour', 'success');
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function saveSeuilR() {
+  seuilR = parseInt(document.getElementById('seuil-r').value) || 12;
+  try {
+    await sbUpsert('dl_config', { maison_id: currentMaison.id, cle:'seuil_r', valeur: String(seuilR) }, 'maison_id,cle');
+    toast('Seuil R mis à jour', 'success');
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
 
@@ -10028,6 +11699,13 @@ async function loadAdmin() {
       <td><code>${m.login}</code></td>
       <td><div style="display:flex;gap:8px;flex-wrap:wrap">${checks}</div></td>
       <td><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:${m.couleur||'#ccc'}"></span> ${m.couleur||''}</td>
+      <td>
+        <div style="display:flex;gap:4px;align-items:center">
+          <input type="text" id="mention-legale-${m.id}" value="${(m.mention_legale||'').replace(/"/g,'&quot;')}"
+                 placeholder="Ex: Chez Daddy..., adresse, SIRET" style="width:220px;font-size:11px;padding:4px 6px;border:1px solid var(--gris);border-radius:4px">
+          <button class="btn btn-secondary btn-sm" onclick="saveMentionLegale('${m.id}')" title="Enregistrer">💾</button>
+        </div>
+      </td>
       <td><button class="btn btn-danger btn-sm" onclick="deleteMaison('${m.id}')">Supprimer</button></td>
     </tr>`;
   }).join('');
@@ -10084,13 +11762,14 @@ async function createMaison() {
   if (document.getElementById('new-svc-loc').checked)   svcs.push('loc');
   if (document.getElementById('new-svc-adh').checked)   svcs.push('adh');
 
+  const mention = document.getElementById('new-maison-mention').value.trim();
   if (!nom || !login || !mdp) { toast('Nom, login et MDP obligatoires','error'); return; }
 
   const id = nom.toUpperCase().replace(/[^A-Z0-9]/g,'').substring(0,5) + Date.now().toString().slice(-3);
   try {
-    await sbInsert('dl_maisons', { id, nom, ville, adresse:adr, login, mdp, couleur:color, services:svcs, actif:true });
+    await sbInsert('dl_maisons', { id, nom, ville, adresse:adr, mention_legale:mention, login, mdp, couleur:color, services:svcs, actif:true });
     toast('Maison créée','success');
-    ['nom','ville','adresse','login','mdp'].forEach(f => document.getElementById('new-maison-'+f).value='');
+    ['nom','ville','adresse','mention','login','mdp'].forEach(f => document.getElementById('new-maison-'+f).value='');
     await loadMaisons();
     populateMaisonSelector();
     loadAdmin();
@@ -10107,6 +11786,16 @@ async function saveServicesMaison(maisId) {
     const m = allMaisons.find(x => x.id === maisId);
     if (m) m.services = svcs;
     toast(`Services de ${allMaisons.find(x=>x.id===maisId)?.nom||maisId} mis à jour`, 'success');
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function saveMentionLegale(maisId) {
+  const val = document.getElementById(`mention-legale-${maisId}`).value.trim();
+  try {
+    await sbUpdate('dl_maisons', maisId, { mention_legale: val });
+    const m = allMaisons.find(x => x.id === maisId);
+    if (m) m.mention_legale = val;
+    toast('Mention légale enregistrée', 'success');
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
 
@@ -10471,6 +12160,26 @@ async function patchMaisonsServices() {
       }
     } catch(e) { /* silencieux */ }
   }
+}
+
+async function patchCotisationRestaurant() {
+  // Ajoute la prestation "Cotisation Restaurant" pour chaque maison qui ne l'a pas encore
+  try {
+    const maisons = await sbSelect('dl_maisons', '?select=id');
+    const y = new Date().getFullYear();
+    for (const m of maisons) {
+      const existing = await sbSelect('dl_carte', `?maison_id=eq.${m.id}&libelle=eq.Cotisation Restaurant&limit=1`);
+      if (existing && existing.length) continue;
+      await sbInsert('dl_carte', {
+        maison_id: m.id,
+        type_client: 'resident',
+        libelle: 'Cotisation Restaurant',
+        prix1: 12.94, prix2: null, tva: 10,
+        mois_debut: y + '-01',
+        mois_fin:   y + '-12',
+      }).catch(()=>{});
+    }
+  } catch(e) { /* silencieux */ }
 }
 
 async function seedGardienSaisie() {
@@ -11025,6 +12734,7 @@ window.addEventListener('load', async () => {
         await seedLMDResidents();
         await seedGardienSaisie();
         await patchMaisonsServices();
+        await patchCotisationRestaurant();
       }
     } catch(e) {
       sessionStorage.removeItem('dl_user');
@@ -11094,6 +12804,7 @@ const CARTE_DEFAULT = [
   { type:'resident', libelle:'Repas Invité tarif réduit',                prix1:15.58,  prix2:null, tva:10 },
   { type:'resident', libelle:'Repas Invité Enfant',                      prix1:12.00,  prix2:null, tva:10 },
   { type:'resident', libelle:'Repas amélioré',                           prix1:1.50,   prix2:null, tva:10 },
+  { type:'resident', libelle:'Cotisation Restaurant',                    prix1:12.94,  prix2:null, tva:10 },
   { type:'resident', libelle:'Portage repas',                            prix1:2.00,   prix2:null, tva:10 },
   { type:'resident', libelle:'Plateau à emporter',                       prix1:0.00,   prix2:null, tva:10 },
   { type:'resident', libelle:'Potage (1L)',                              prix1:2.20,   prix2:null, tva:10 },
@@ -11120,6 +12831,7 @@ let allMaisons = [];
 let allResidents = [];
 let allCarte = [];
 let seuilN = 15;
+let seuilR = 12;
 let joursPotage = [2, 5]; // mardi=2, vendredi=5 par défaut (0=dim,1=lun,...,6=sam)
 let confirmResolve = null;
 
@@ -11396,6 +13108,496 @@ function showPage(name) {
   if (name === 'feuille-mh') initMH();
   if (name === 'feuille-chef') initChef();
   if (name === 'export-csv') initCSV();
+  if (name === 'facturation') initFacturation();
+}
+
+// =============================
+// FACTURATION (Lot 2)
+// =============================
+
+let factCurrentResident = null; // résident sélectionné (objet complet)
+let factCurrentMois = null;     // mois facturé sélectionné (YYYY-MM)
+let factLastKey = null;         // mémorise resident_id+mois de la dernière génération (anti-fuite)
+let factEvenements = [];        // événements (jours off / hospi) du résident pour le mois facturé, chargés/édités en mémoire
+
+async function initFacturation() {
+  await populateFactResidents();
+  populateFactMois();
+  resetFacturation();
+}
+
+async function populateFactResidents() {
+  const sel = document.getElementById('fact-resident');
+  const cur = sel.value;
+  try {
+    const data = await sbSelect('dl_residents', `?maison_id=eq.${currentMaison.id}&order=nom`);
+    allResidents = data;
+  } catch(e) { allResidents = []; }
+
+  // Seuls les résidents non-NR sont facturables
+  const facturables = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+
+  sel.innerHTML = '<option value="">— Choisir un résident —</option>';
+  for (const r of facturables) {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = `${r.nom} ${r.prenom||''} (Appt. ${r.appt||'—'})`;
+    sel.appendChild(opt);
+  }
+  if (cur && facturables.find(r => r.id == cur)) sel.value = cur;
+}
+
+function populateFactMois() {
+  const sel = document.getElementById('fact-mois');
+  const cur = sel.value;
+  const today = new Date();
+  const MOIS_LONG_LOCAL = MOIS_LONG;
+  let html = '';
+  // Les 13 derniers mois écoulés (le mois précédent en premier, par défaut sélectionné)
+  for (let i = 1; i <= 13; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const moisStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label = `${MOIS_LONG_LOCAL[d.getMonth()]} ${d.getFullYear()}`;
+    const selected = (i === 1) ? 'selected' : '';
+    html += `<option value="${moisStr}" ${selected}>${label}</option>`;
+  }
+  sel.innerHTML = html;
+  if (cur) sel.value = cur;
+}
+
+function onFactResidentChange() {
+  const id = document.getElementById('fact-resident').value;
+  factCurrentResident = allResidents.find(r => r.id == id) || null;
+  loadFactSavedList();
+}
+
+function onFactMoisChange() {
+  factCurrentMois = document.getElementById('fact-mois').value;
+  loadFactSavedList();
+}
+
+function resetFacturation() {
+  document.getElementById('fact-output').innerHTML = '';
+  factLastKey = null;
+  factEvenements = [];
+}
+
+// ========== Calendrier événements générique (Jours off / Hospitalisation) ==========
+let evcalViewDate = new Date();
+let evcalMode = null;      // 'single' (jours off) | 'range' (hospitalisation)
+let evcalRangeStart = null; // pour le mode range : 1er clic = début
+let evcalCallback = null;   // fonction appelée avec la date (ou plage) choisie
+
+function openEvCal(triggerEl, mode, baseMonthDate, callback) {
+  evcalMode = mode;
+  evcalRangeStart = null;
+  evcalCallback = callback;
+  evcalViewDate = baseMonthDate ? new Date(baseMonthDate) : new Date();
+
+  // Fermer un éventuel popup déjà ouvert
+  closeEvCal();
+
+  const popup = document.createElement('div');
+  popup.className = 'evcal-popup';
+  popup.id = 'evcal-popup';
+  document.body.appendChild(popup);
+
+  // Positionner sous le bouton déclencheur
+  const rect = triggerEl.getBoundingClientRect();
+  popup.style.top = (window.scrollY + rect.bottom + 6) + 'px';
+  popup.style.left = (window.scrollX + rect.left) + 'px';
+
+  renderEvCal();
+
+  // Fermer si clic en dehors
+  setTimeout(() => {
+    document.addEventListener('click', evcalOutsideClickHandler);
+  }, 0);
+}
+
+function evcalOutsideClickHandler(e) {
+  const popup = document.getElementById('evcal-popup');
+  if (popup && !popup.contains(e.target)) {
+    closeEvCal();
+  }
+}
+
+function closeEvCal() {
+  const popup = document.getElementById('evcal-popup');
+  if (popup) popup.remove();
+  document.removeEventListener('click', evcalOutsideClickHandler);
+}
+
+function renderEvCal() {
+  const popup = document.getElementById('evcal-popup');
+  if (!popup) return;
+  const year = evcalViewDate.getFullYear();
+  const month = evcalViewDate.getMonth();
+  const monthLabel = MOIS_LONG[month] + ' ' + year;
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+  const todayStr = fmtDateISO(new Date());
+
+  let html = `
+    <div class="evcal-header">
+      <button onclick="evcalNavigate(-1)" type="button">‹</button>
+      <span class="evcal-month-label">${monthLabel}</span>
+      <button onclick="evcalNavigate(1)" type="button">›</button>
+    </div>
+    <table class="evcal-grid">
+      <thead><tr><th>L</th><th>M</th><th>M</th><th>J</th><th>V</th><th>S</th><th>D</th></tr></thead>
+      <tbody>`;
+
+  let cursor = new Date(startMonday);
+  for (let w = 0; w < 6; w++) {
+    html += '<tr>';
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(cursor);
+      const dayStr = fmtDateISO(day);
+      const otherMonth = day.getMonth() !== month;
+      let cls = otherMonth ? 'evcal-other-month' : 'evcal-day';
+
+      if (!otherMonth && evcalMode === 'range' && evcalRangeStart) {
+        if (dayStr === evcalRangeStart) cls += ' evcal-selected';
+        else if (dayStr > evcalRangeStart) cls += ''; // sera affiné au survol, simplifié ici
+      }
+
+      const onclick = otherMonth ? '' : `onclick="evcalDayClick('${dayStr}')"`;
+      html += `<td class="${cls}" ${onclick}>${day.getDate()}</td>`;
+      cursor = addDays(cursor, 1);
+    }
+    html += '</tr>';
+    if (cursor.getMonth() !== month && w >= 4) break;
+  }
+
+  html += `</tbody></table>
+    <div class="evcal-footer">
+      ${evcalMode === 'range' && evcalRangeStart ? `<span style="font-size:11px;color:var(--gris-mid)">Début : ${fmtDateFr(evcalRangeStart)} — cliquez la date de fin</span>` : ''}
+      <button type="button" onclick="closeEvCal()">Annuler</button>
+    </div>`;
+
+  popup.innerHTML = html;
+}
+
+function evcalNavigate(delta) {
+  evcalViewDate = new Date(evcalViewDate.getFullYear(), evcalViewDate.getMonth() + delta, 1);
+  renderEvCal();
+}
+
+function evcalDayClick(dayStr) {
+  if (evcalMode === 'single') {
+    evcalCallback(dayStr, null);
+    closeEvCal();
+  } else if (evcalMode === 'range') {
+    if (!evcalRangeStart) {
+      evcalRangeStart = dayStr;
+      renderEvCal();
+    } else {
+      let debut = evcalRangeStart, fin = dayStr;
+      if (fin < debut) { [debut, fin] = [fin, debut]; } // garantir debut <= fin
+      evcalCallback(debut, fin);
+      closeEvCal();
+    }
+  }
+}
+
+function fmtDateFr(d) {
+  if (!d) return '';
+  const dt = (typeof d === 'string') ? new Date(d + 'T00:00:00') : d;
+  return `${String(dt.getDate()).padStart(2,'0')} ${MOIS_LONG[dt.getMonth()]} ${dt.getFullYear()}`;
+}
+
+async function genererFacture() {
+  const resId = document.getElementById('fact-resident').value;
+  const mois  = document.getElementById('fact-mois').value;
+  if (!resId) { toast('Veuillez choisir un résident','error'); return; }
+  if (!mois)  { toast('Veuillez choisir un mois','error'); return; }
+
+  const res = allResidents.find(r => r.id == resId);
+  if (!res) { toast('Résident introuvable','error'); return; }
+
+  const nouvelleCle = `${resId}-${mois}`;
+  const memeFacture = (factLastKey === nouvelleCle);
+
+  factCurrentResident = res;
+  factCurrentMois = mois;
+  factLastKey = nouvelleCle;
+
+  const [annee, moisNum] = mois.split('-').map(Number);
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  // Charger les événements (jours off / hospi) déjà enregistrés pour CE résident et CE mois
+  // (uniquement si on change de résident/mois — sinon on garde les éventuelles modifications en cours)
+  if (!memeFacture) {
+    try {
+      factEvenements = await sbSelect('dl_evenements',
+        `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&mois=eq.${mois}&order=date_debut`);
+    } catch(e) { factEvenements = []; }
+    try {
+      const cfgRA = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${mois}&limit=1`);
+      factJoursAmeliore = (cfgRA && cfgRA.length) ? (cfgRA[0].jours || []) : [];
+    } catch(e) { factJoursAmeliore = []; }
+  }
+
+  // ===== SECTION 1 : informations résident =====
+  const nomPrenom = `${res.nom} ${res.prenom||''}`.trim();
+  const nbResidents = res.nb_residents || 1;
+  const categorie = res.categorie || '—';
+  const dateEntree = res.date_entree ? fmtDateFr(res.date_entree) : '—';
+  const dateSortie = res.date_sortie ? fmtDateFr(res.date_sortie) : '—';
+
+  let html = `<div class="print-doc" id="fact-print-content">
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px;background:#fafafa">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Mois :</strong> <span style="color:#c0392b">${moisLabel}</span></div>
+          <div><strong>Résident :</strong> <span style="color:#c0392b">${nomPrenom.toUpperCase()}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Appt. :</strong> <span style="color:#2980b9">${res.appt||'—'}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Nb Résidents :</strong> <span style="color:#2980b9">${nbResidents}</span></div>
+          <div><strong>Catégorie :</strong> <span style="color:#2980b9">${categorie}</span></div>
+        </div>
+        <div style="font-size:13px;line-height:1.6">
+          <div><strong>Date d'entrée :</strong> <span style="color:#2980b9">${dateEntree}</span></div>
+          <div><strong>Date de sortie :</strong> <span style="color:#2980b9">${dateSortie}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--gris-clair);border-radius:8px;padding:16px 20px;margin-bottom:20px" id="fact-evenements-zone">
+      <div style="font-weight:700;font-size:14px;margin-bottom:12px">Événements</div>
+      <div style="margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600">Jours off</span>
+        <button type="button" class="evcal-add-btn no-print" id="btn-add-joursoff"
+                onclick="onAddJourOff(this)" title="Ajouter un jour off">+</button>
+        <span id="chips-joursoff" style="margin-left:6px"></span>
+      </div>
+      <div style="margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600">Hospitalisation</span>
+        <button type="button" class="evcal-add-btn no-print" id="btn-add-hospi"
+                onclick="onAddHospi(this)" title="Ajouter une période d'hospitalisation">+</button>
+        <span id="chips-hospi" style="margin-left:6px"></span>
+      </div>
+      <div>
+        <span style="font-size:13px;font-weight:600">Jours repas amélioré (paramètre du mois)</span>
+        <button type="button" class="btn btn-secondary btn-sm no-print" style="margin-left:8px"
+                onclick="openRepasAmelioreModal()">📅 Paramétrer</button>
+        <span id="chips-repas-ameliore" style="margin-left:6px;font-size:12px;color:var(--gris-mid)"></span>
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:24px;color:var(--gris-mid);border:1px dashed var(--gris-clair);border-radius:8px">
+      Section Services à venir...
+    </div>
+  </div>`;
+
+  document.getElementById('fact-output').innerHTML = html;
+  renderFactEvenements();
+}
+
+function renderFactEvenements() {
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  const nbJoursMois = new Date(annee, moisNum, 0).getDate();
+
+  const offs = factEvenements.filter(e => e.type === 'off');
+  const hospis = factEvenements.filter(e => e.type === 'hospi');
+
+  const chipsRA = document.getElementById('chips-repas-ameliore');
+  if (chipsRA) {
+    if (factJoursAmeliore && factJoursAmeliore.length) {
+      chipsRA.textContent = `${factJoursAmeliore.length} jour(s) paramétré(s) : ${factJoursAmeliore.sort((a,b)=>a-b).join(', ')}`;
+    } else {
+      chipsRA.textContent = 'Aucun jour paramétré';
+    }
+  }
+
+  const chipsOff = document.getElementById('chips-joursoff');
+  if (chipsOff) {
+    chipsOff.innerHTML = offs.map(e => `
+      <span class="evchip evchip-off">${fmtDateFr(e.date_debut)}
+        <button type="button" onclick="removeFactEvenement('${e.date_debut}','off')" title="Retirer">✕</button>
+      </span>`).join('');
+  }
+
+  const chipsHospi = document.getElementById('chips-hospi');
+  if (chipsHospi) {
+    chipsHospi.innerHTML = hospis.map(e => {
+      const label = (e.date_debut === e.date_fin)
+        ? fmtDateFr(e.date_debut)
+        : `${fmtDateFr(e.date_debut)} → ${fmtDateFr(e.date_fin)}`;
+      return `<span class="evchip evchip-hospi">${label}
+        <button type="button" onclick="removeFactEvenement('${e.date_debut}','hospi')" title="Retirer">✕</button>
+      </span>`;
+    }).join('');
+  }
+
+  // Désactiver le bouton + Jours off si la limite de 10 est atteinte
+  const btnOff = document.getElementById('btn-add-joursoff');
+  if (btnOff) btnOff.disabled = (offs.length >= 10);
+}
+
+function onAddJourOff(btnEl) {
+  const offs = factEvenements.filter(e => e.type === 'off');
+  if (offs.length >= 10) { toast('Maximum 10 jours off par mois','error'); return; }
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  openEvCal(btnEl, 'single', new Date(annee, moisNum-1, 1), (dateStr) => {
+    // Éviter les doublons
+    if (factEvenements.some(e => e.type === 'off' && e.date_debut === dateStr)) {
+      toast('Ce jour est déjà enregistré','info'); return;
+    }
+    factEvenements.push({ type:'off', date_debut: dateStr, date_fin: dateStr, _new: true });
+    renderFactEvenements();
+  });
+}
+
+function onAddHospi(btnEl) {
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  openEvCal(btnEl, 'range', new Date(annee, moisNum-1, 1), (debut, fin) => {
+    factEvenements.push({ type:'hospi', date_debut: debut, date_fin: fin, _new: true });
+    renderFactEvenements();
+  });
+}
+
+function removeFactEvenement(dateDebut, type) {
+  factEvenements = factEvenements.filter(e => !(e.type === type && e.date_debut === dateDebut));
+  renderFactEvenements();
+}
+
+// ========== Popup "Jours repas amélioré" — paramètre persistant par maison + mois ==========
+let factJoursAmeliore = []; // jours du mois (1-31) cochés, en mémoire pendant l'édition de la popup
+
+async function openRepasAmelioreModal() {
+  if (!factCurrentMois) { toast('Choisissez d\'abord un mois','error'); return; }
+  const [annee, moisNum] = factCurrentMois.split('-').map(Number);
+  const nbJours = new Date(annee, moisNum, 0).getDate();
+
+  // Charger la configuration existante pour ce mois (pré-remplissage), sinon reprendre le mois précédent
+  try {
+    const cfg = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${factCurrentMois}&limit=1`);
+    if (cfg && cfg.length) {
+      factJoursAmeliore = cfg[0].jours || [];
+    } else {
+      // Pré-remplissage avec le mois précédent si rien n'existe encore pour ce mois
+      const moisPrec = new Date(annee, moisNum-2, 1);
+      const moisPrecStr = `${moisPrec.getFullYear()}-${String(moisPrec.getMonth()+1).padStart(2,'0')}`;
+      const cfgPrec = await sbSelect('dl_repas_ameliore', `?maison_id=eq.${currentMaison.id}&mois=eq.${moisPrecStr}&limit=1`);
+      factJoursAmeliore = (cfgPrec && cfgPrec.length) ? (cfgPrec[0].jours || []) : [];
+    }
+  } catch(e) { factJoursAmeliore = []; }
+
+  const moisLabel = `${MOIS_LONG[moisNum-1]} ${annee}`;
+
+  // Construire la grille de cases à cocher (style calendrier, 7 colonnes)
+  const firstOfMonth = new Date(annee, moisNum-1, 1);
+  const startMonday = getMondayOf(firstOfMonth);
+  let grid = '';
+  let cursor = new Date(startMonday);
+  for (let w = 0; w < 6; w++) {
+    grid += '<tr>';
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(cursor);
+      const otherMonth = day.getMonth() !== (moisNum-1);
+      if (otherMonth) {
+        grid += '<td style="color:#ccc;padding:6px"></td>';
+      } else {
+        const num = day.getDate();
+        const checked = factJoursAmeliore.includes(num) ? 'checked' : '';
+        grid += `<td style="padding:4px;text-align:center">
+          <label style="display:flex;flex-direction:column;align-items:center;cursor:pointer;font-size:11px">
+            <input type="checkbox" value="${num}" class="ra-day-cb" ${checked} style="margin-bottom:2px">
+            ${num}
+          </label>
+        </td>`;
+      }
+      cursor = addDays(cursor, 1);
+    }
+    grid += '</tr>';
+    if (cursor.getMonth() !== (moisNum-1) && w >= 4) break;
+  }
+
+  const modalHtml = `
+    <div id="ra-modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this) closeRepasAmelioreModal()">
+      <div style="background:white;border-radius:10px;padding:20px 24px;max-width:380px;box-shadow:0 12px 40px rgba(0,0,0,.25)">
+        <div style="font-weight:700;font-size:15px;margin-bottom:4px">Jours repas amélioré — ${moisLabel}</div>
+        <div style="font-size:12px;color:var(--gris-mid);margin-bottom:14px">Cochez les jours du mois concernés par le tarif "repas amélioré". Ce paramètre est commun à tous les résidents de la maison pour ce mois.</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr><th style="font-size:10px;color:var(--gris-mid)">L</th><th style="font-size:10px;color:var(--gris-mid)">M</th><th style="font-size:10px;color:var(--gris-mid)">M</th><th style="font-size:10px;color:var(--gris-mid)">J</th><th style="font-size:10px;color:var(--gris-mid)">V</th><th style="font-size:10px;color:var(--gris-mid)">S</th><th style="font-size:10px;color:var(--gris-mid)">D</th></tr></thead>
+          <tbody>${grid}</tbody>
+        </table>
+        <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:10px">
+          <button class="btn btn-secondary" onclick="closeRepasAmelioreModal()">Annuler</button>
+          <button class="btn btn-primary" onclick="saveRepasAmeliore()">Enregistrer</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function closeRepasAmelioreModal() {
+  const overlay = document.getElementById('ra-modal-overlay');
+  if (overlay) overlay.remove();
+}
+
+async function saveRepasAmeliore() {
+  const jours = Array.from(document.querySelectorAll('.ra-day-cb:checked')).map(cb => parseInt(cb.value));
+  try {
+    await sbUpsert('dl_repas_ameliore',
+      { maison_id: currentMaison.id, mois: factCurrentMois, jours, updated_at: new Date().toISOString() },
+      'maison_id,mois');
+    factJoursAmeliore = jours;
+    closeRepasAmelioreModal();
+    renderFactEvenements();
+    toast('Jours repas amélioré enregistrés','success');
+  } catch(e) {
+    toast('Erreur: '+e.message,'error');
+  }
+}
+
+async function loadFactSavedList() {
+  const tbody = document.getElementById('fact-saved-list');
+  if (!tbody) return;
+  const resId = document.getElementById('fact-resident').value;
+  if (!resId) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Sélectionnez un résident pour voir ses factures</td></tr>';
+    return;
+  }
+  try {
+    const data = await sbSelect('dl_factures', `?maison_id=eq.${currentMaison.id}&resident_id=eq.${resId}&order=mois.desc&limit=30`);
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gris-mid);padding:16px">Aucune facture enregistrée pour ce résident</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(f => {
+      const [a,m] = f.mois.split('-').map(Number);
+      const moisLabel = `${MOIS_LONG[m-1]} ${a}`;
+      const upd = f.updated_at ? new Date(f.updated_at) : null;
+      const updFmt = upd ? `${String(upd.getDate()).padStart(2,'0')}/${String(upd.getMonth()+1).padStart(2,'0')}/${upd.getFullYear()} ${String(upd.getHours()).padStart(2,'0')}:${String(upd.getMinutes()).padStart(2,'0')}` : '—';
+      const statutBadge = f.statut === 'validee'
+        ? '<span class="badge badge-blue">Validée</span>'
+        : '<span class="badge badge-orange">Créée</span>';
+      return `<tr>
+        <td><code>${f.numero}</code></td>
+        <td>${factCurrentResident ? factCurrentResident.nom+' '+(factCurrentResident.prenom||'') : ''}</td>
+        <td>${moisLabel}</td>
+        <td>${f.montant_total != null ? fmt2(f.montant_total)+' €' : '—'}</td>
+        <td>${statutBadge}</td>
+        <td style="font-size:12px;color:var(--gris-mid)">${updFmt}</td>
+        <td><button class="btn btn-secondary btn-sm" title="Reprendre cette facture" onclick="reprendreFacture(${f.id})">✏️</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--rouge);padding:16px">Erreur: ${e.message}</td></tr>`;
+  }
+}
+
+function reprendreFacture(factureId) {
+  // Sera complété à l'étape F (génération + persistance complète)
+  toast('Reprise de facture — à venir', 'info');
 }
 
 // =============================
@@ -11715,6 +13917,10 @@ async function loadCarte() {
     if (cfg.length) seuilN = parseInt(cfg[0].valeur)||15;
     document.getElementById('seuil-n').value = seuilN;
 
+    const cfgR = await sbSelect('dl_config', `?cle=eq.seuil_r&maison_id=eq.${currentMaison.id}&limit=1`);
+    if (cfgR.length) seuilR = parseInt(cfgR[0].valeur)||12;
+    document.getElementById('seuil-r').value = seuilR;
+
     const cfgPot = await sbSelect('dl_config', `?cle=eq.jours_potage&maison_id=eq.${currentMaison.id}&limit=1`);
     if (cfgPot.length) {
       try { joursPotage = JSON.parse(cfgPot[0].valeur); } catch(e) {}
@@ -11785,6 +13991,14 @@ async function saveSeuilN() {
   try {
     await sbUpsert('dl_config', { maison_id: currentMaison.id, cle:'seuil_n', valeur: String(seuilN) }, 'maison_id,cle');
     toast('Seuil N mis à jour', 'success');
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function saveSeuilR() {
+  seuilR = parseInt(document.getElementById('seuil-r').value) || 12;
+  try {
+    await sbUpsert('dl_config', { maison_id: currentMaison.id, cle:'seuil_r', valeur: String(seuilR) }, 'maison_id,cle');
+    toast('Seuil R mis à jour', 'success');
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
 
@@ -13398,6 +15612,13 @@ async function loadAdmin() {
       <td><code>${m.login}</code></td>
       <td><div style="display:flex;gap:8px;flex-wrap:wrap">${checks}</div></td>
       <td><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:${m.couleur||'#ccc'}"></span> ${m.couleur||''}</td>
+      <td>
+        <div style="display:flex;gap:4px;align-items:center">
+          <input type="text" id="mention-legale-${m.id}" value="${(m.mention_legale||'').replace(/"/g,'&quot;')}"
+                 placeholder="Ex: Chez Daddy..., adresse, SIRET" style="width:220px;font-size:11px;padding:4px 6px;border:1px solid var(--gris);border-radius:4px">
+          <button class="btn btn-secondary btn-sm" onclick="saveMentionLegale('${m.id}')" title="Enregistrer">💾</button>
+        </div>
+      </td>
       <td><button class="btn btn-danger btn-sm" onclick="deleteMaison('${m.id}')">Supprimer</button></td>
     </tr>`;
   }).join('');
@@ -13454,13 +15675,14 @@ async function createMaison() {
   if (document.getElementById('new-svc-loc').checked)   svcs.push('loc');
   if (document.getElementById('new-svc-adh').checked)   svcs.push('adh');
 
+  const mention = document.getElementById('new-maison-mention').value.trim();
   if (!nom || !login || !mdp) { toast('Nom, login et MDP obligatoires','error'); return; }
 
   const id = nom.toUpperCase().replace(/[^A-Z0-9]/g,'').substring(0,5) + Date.now().toString().slice(-3);
   try {
-    await sbInsert('dl_maisons', { id, nom, ville, adresse:adr, login, mdp, couleur:color, services:svcs, actif:true });
+    await sbInsert('dl_maisons', { id, nom, ville, adresse:adr, mention_legale:mention, login, mdp, couleur:color, services:svcs, actif:true });
     toast('Maison créée','success');
-    ['nom','ville','adresse','login','mdp'].forEach(f => document.getElementById('new-maison-'+f).value='');
+    ['nom','ville','adresse','mention','login','mdp'].forEach(f => document.getElementById('new-maison-'+f).value='');
     await loadMaisons();
     populateMaisonSelector();
     loadAdmin();
@@ -13477,6 +15699,16 @@ async function saveServicesMaison(maisId) {
     const m = allMaisons.find(x => x.id === maisId);
     if (m) m.services = svcs;
     toast(`Services de ${allMaisons.find(x=>x.id===maisId)?.nom||maisId} mis à jour`, 'success');
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function saveMentionLegale(maisId) {
+  const val = document.getElementById(`mention-legale-${maisId}`).value.trim();
+  try {
+    await sbUpdate('dl_maisons', maisId, { mention_legale: val });
+    const m = allMaisons.find(x => x.id === maisId);
+    if (m) m.mention_legale = val;
+    toast('Mention légale enregistrée', 'success');
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
 
@@ -13841,6 +16073,26 @@ async function patchMaisonsServices() {
       }
     } catch(e) { /* silencieux */ }
   }
+}
+
+async function patchCotisationRestaurant() {
+  // Ajoute la prestation "Cotisation Restaurant" pour chaque maison qui ne l'a pas encore
+  try {
+    const maisons = await sbSelect('dl_maisons', '?select=id');
+    const y = new Date().getFullYear();
+    for (const m of maisons) {
+      const existing = await sbSelect('dl_carte', `?maison_id=eq.${m.id}&libelle=eq.Cotisation Restaurant&limit=1`);
+      if (existing && existing.length) continue;
+      await sbInsert('dl_carte', {
+        maison_id: m.id,
+        type_client: 'resident',
+        libelle: 'Cotisation Restaurant',
+        prix1: 12.94, prix2: null, tva: 10,
+        mois_debut: y + '-01',
+        mois_fin:   y + '-12',
+      }).catch(()=>{});
+    }
+  } catch(e) { /* silencieux */ }
 }
 
 async function seedGardienSaisie() {
@@ -14395,6 +16647,7 @@ window.addEventListener('load', async () => {
         await seedLMDResidents();
         await seedGardienSaisie();
         await patchMaisonsServices();
+        await patchCotisationRestaurant();
       }
     } catch(e) {
       sessionStorage.removeItem('dl_user');
