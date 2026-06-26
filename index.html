@@ -1399,7 +1399,17 @@ async function populateFactResidents() {
   } catch(e) { allResidents = []; }
 
   // Seuls les résidents non-NR sont facturables
-  const facturables = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+  const tousNonNR = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+  const today = fmtDateISO(new Date());
+
+  // Un résident est "actif" si pas de date de sortie, ou date de sortie future/aujourd'hui
+  const estActif = r => !r.date_sortie || r.date_sortie >= today;
+  const facturables = tousNonNR.filter(estActif);
+
+  // Appartements vacants : appartements connus (présents dans la fiche résidents) où PLUS AUCUN résident n'est actif
+  const apptsAvecActif = new Set(facturables.map(r => r.appt));
+  const apptsConnus = new Set(tousNonNR.map(r => r.appt).filter(a => a));
+  const apptsVacants = Array.from(apptsConnus).filter(a => !apptsAvecActif.has(a)).sort();
 
   sel.innerHTML = '<option value="">— Choisir un résident —</option>';
   for (const r of facturables) {
@@ -1407,6 +1417,18 @@ async function populateFactResidents() {
     opt.value = r.id;
     opt.textContent = `${r.nom} ${r.prenom||''} (Appt. ${r.appt||'—'})`;
     sel.appendChild(opt);
+  }
+  if (apptsVacants.length) {
+    const optGroup = document.createElement('optgroup');
+    optGroup.label = 'Appartements vacants (aucun résident actif)';
+    for (const appt of apptsVacants) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.disabled = true;
+      opt.textContent = `Appt. ${appt} — vacant`;
+      optGroup.appendChild(opt);
+    }
+    sel.appendChild(optGroup);
   }
   if (cur && facturables.find(r => r.id == cur)) sel.value = cur;
 }
@@ -2008,15 +2030,17 @@ function buildTableGauche(repasMois, mois, calc) {
     const jourLettre = JOURS_1L[(dateObj.getDay()+6)%7];
     const r = repasByDate[dateStr] || {};
     const weekend = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
-    rows += `<tr style="${weekend?'background:#f7f7f7':''}">
-      <td style="text-align:center;font-weight:600;width:24px">${jourLettre}</td>
+    const estAmeliore = (factJoursAmeliore||[]).includes(j);
+    const rowStyle = estAmeliore ? 'background:#fdf0d8' : (weekend ? 'background:#f7f7f7' : '');
+    rows += `<tr style="${rowStyle}">
+      <td style="text-align:center;font-weight:600;width:24px">${jourLettre}${estAmeliore?' <span title="Repas amélioré" style="color:#e59e00">★</span>':''}</td>
       <td style="text-align:center;width:28px">${j}</td>
-      <td style="text-align:center">${r.repas_salle||0}</td>
-      <td style="text-align:center">${r.repas_invite||0}</td>
-      <td style="text-align:center">${r.plateau_porte||0}</td>
-      <td style="text-align:center">${r.plateau_emporte||0}</td>
-      <td style="text-align:center">${r.potage||0}</td>
-      <td style="text-align:center">${r.boisson_eur ? fmt2(r.boisson_eur) : '0.00'}</td>
+      <td style="text-align:center">${r.repas_salle ? r.repas_salle : '-'}</td>
+      <td style="text-align:center">${r.repas_invite ? r.repas_invite : '-'}</td>
+      <td style="text-align:center">${r.plateau_porte ? r.plateau_porte : '-'}</td>
+      <td style="text-align:center">${r.plateau_emporte ? r.plateau_emporte : '-'}</td>
+      <td style="text-align:center">${r.potage ? r.potage : '-'}</td>
+      <td style="text-align:center">${r.boisson_eur ? fmt2(r.boisson_eur) : '-'}</td>
     </tr>`;
   }
 
@@ -2085,6 +2109,10 @@ function buildTableGauche(repasMois, mois, calc) {
         </tr>
       </tfoot>
     </table>
+    <div style="margin-top:6px;font-size:10px;color:#8a5c00;display:flex;align-items:center;gap:5px">
+      <span style="display:inline-block;width:12px;height:12px;background:#fdf0d8;border:1px solid #e59e00"></span>
+      Ligne orange = jour "repas amélioré" paramétré pour le mois
+    </div>
     ${t.nbRepasAmeliore > 0 ? `<div style="margin-top:8px;font-size:11px"><strong>Repas amélioré :</strong> ${t.nbRepasAmeliore} jour(s) — ${fmt2(calc.montants.ameliorHT)}€ HT</div>` : ''}
   `;
 }
@@ -5832,7 +5860,17 @@ async function populateFactResidents() {
   } catch(e) { allResidents = []; }
 
   // Seuls les résidents non-NR sont facturables
-  const facturables = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+  const tousNonNR = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+  const today = fmtDateISO(new Date());
+
+  // Un résident est "actif" si pas de date de sortie, ou date de sortie future/aujourd'hui
+  const estActif = r => !r.date_sortie || r.date_sortie >= today;
+  const facturables = tousNonNR.filter(estActif);
+
+  // Appartements vacants : appartements connus (présents dans la fiche résidents) où PLUS AUCUN résident n'est actif
+  const apptsAvecActif = new Set(facturables.map(r => r.appt));
+  const apptsConnus = new Set(tousNonNR.map(r => r.appt).filter(a => a));
+  const apptsVacants = Array.from(apptsConnus).filter(a => !apptsAvecActif.has(a)).sort();
 
   sel.innerHTML = '<option value="">— Choisir un résident —</option>';
   for (const r of facturables) {
@@ -5840,6 +5878,18 @@ async function populateFactResidents() {
     opt.value = r.id;
     opt.textContent = `${r.nom} ${r.prenom||''} (Appt. ${r.appt||'—'})`;
     sel.appendChild(opt);
+  }
+  if (apptsVacants.length) {
+    const optGroup = document.createElement('optgroup');
+    optGroup.label = 'Appartements vacants (aucun résident actif)';
+    for (const appt of apptsVacants) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.disabled = true;
+      opt.textContent = `Appt. ${appt} — vacant`;
+      optGroup.appendChild(opt);
+    }
+    sel.appendChild(optGroup);
   }
   if (cur && facturables.find(r => r.id == cur)) sel.value = cur;
 }
@@ -6441,15 +6491,17 @@ function buildTableGauche(repasMois, mois, calc) {
     const jourLettre = JOURS_1L[(dateObj.getDay()+6)%7];
     const r = repasByDate[dateStr] || {};
     const weekend = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
-    rows += `<tr style="${weekend?'background:#f7f7f7':''}">
-      <td style="text-align:center;font-weight:600;width:24px">${jourLettre}</td>
+    const estAmeliore = (factJoursAmeliore||[]).includes(j);
+    const rowStyle = estAmeliore ? 'background:#fdf0d8' : (weekend ? 'background:#f7f7f7' : '');
+    rows += `<tr style="${rowStyle}">
+      <td style="text-align:center;font-weight:600;width:24px">${jourLettre}${estAmeliore?' <span title="Repas amélioré" style="color:#e59e00">★</span>':''}</td>
       <td style="text-align:center;width:28px">${j}</td>
-      <td style="text-align:center">${r.repas_salle||0}</td>
-      <td style="text-align:center">${r.repas_invite||0}</td>
-      <td style="text-align:center">${r.plateau_porte||0}</td>
-      <td style="text-align:center">${r.plateau_emporte||0}</td>
-      <td style="text-align:center">${r.potage||0}</td>
-      <td style="text-align:center">${r.boisson_eur ? fmt2(r.boisson_eur) : '0.00'}</td>
+      <td style="text-align:center">${r.repas_salle ? r.repas_salle : '-'}</td>
+      <td style="text-align:center">${r.repas_invite ? r.repas_invite : '-'}</td>
+      <td style="text-align:center">${r.plateau_porte ? r.plateau_porte : '-'}</td>
+      <td style="text-align:center">${r.plateau_emporte ? r.plateau_emporte : '-'}</td>
+      <td style="text-align:center">${r.potage ? r.potage : '-'}</td>
+      <td style="text-align:center">${r.boisson_eur ? fmt2(r.boisson_eur) : '-'}</td>
     </tr>`;
   }
 
@@ -6518,6 +6570,10 @@ function buildTableGauche(repasMois, mois, calc) {
         </tr>
       </tfoot>
     </table>
+    <div style="margin-top:6px;font-size:10px;color:#8a5c00;display:flex;align-items:center;gap:5px">
+      <span style="display:inline-block;width:12px;height:12px;background:#fdf0d8;border:1px solid #e59e00"></span>
+      Ligne orange = jour "repas amélioré" paramétré pour le mois
+    </div>
     ${t.nbRepasAmeliore > 0 ? `<div style="margin-top:8px;font-size:11px"><strong>Repas amélioré :</strong> ${t.nbRepasAmeliore} jour(s) — ${fmt2(calc.montants.ameliorHT)}€ HT</div>` : ''}
   `;
 }
@@ -10264,7 +10320,17 @@ async function populateFactResidents() {
   } catch(e) { allResidents = []; }
 
   // Seuls les résidents non-NR sont facturables
-  const facturables = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+  const tousNonNR = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+  const today = fmtDateISO(new Date());
+
+  // Un résident est "actif" si pas de date de sortie, ou date de sortie future/aujourd'hui
+  const estActif = r => !r.date_sortie || r.date_sortie >= today;
+  const facturables = tousNonNR.filter(estActif);
+
+  // Appartements vacants : appartements connus (présents dans la fiche résidents) où PLUS AUCUN résident n'est actif
+  const apptsAvecActif = new Set(facturables.map(r => r.appt));
+  const apptsConnus = new Set(tousNonNR.map(r => r.appt).filter(a => a));
+  const apptsVacants = Array.from(apptsConnus).filter(a => !apptsAvecActif.has(a)).sort();
 
   sel.innerHTML = '<option value="">— Choisir un résident —</option>';
   for (const r of facturables) {
@@ -10272,6 +10338,18 @@ async function populateFactResidents() {
     opt.value = r.id;
     opt.textContent = `${r.nom} ${r.prenom||''} (Appt. ${r.appt||'—'})`;
     sel.appendChild(opt);
+  }
+  if (apptsVacants.length) {
+    const optGroup = document.createElement('optgroup');
+    optGroup.label = 'Appartements vacants (aucun résident actif)';
+    for (const appt of apptsVacants) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.disabled = true;
+      opt.textContent = `Appt. ${appt} — vacant`;
+      optGroup.appendChild(opt);
+    }
+    sel.appendChild(optGroup);
   }
   if (cur && facturables.find(r => r.id == cur)) sel.value = cur;
 }
@@ -10873,15 +10951,17 @@ function buildTableGauche(repasMois, mois, calc) {
     const jourLettre = JOURS_1L[(dateObj.getDay()+6)%7];
     const r = repasByDate[dateStr] || {};
     const weekend = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
-    rows += `<tr style="${weekend?'background:#f7f7f7':''}">
-      <td style="text-align:center;font-weight:600;width:24px">${jourLettre}</td>
+    const estAmeliore = (factJoursAmeliore||[]).includes(j);
+    const rowStyle = estAmeliore ? 'background:#fdf0d8' : (weekend ? 'background:#f7f7f7' : '');
+    rows += `<tr style="${rowStyle}">
+      <td style="text-align:center;font-weight:600;width:24px">${jourLettre}${estAmeliore?' <span title="Repas amélioré" style="color:#e59e00">★</span>':''}</td>
       <td style="text-align:center;width:28px">${j}</td>
-      <td style="text-align:center">${r.repas_salle||0}</td>
-      <td style="text-align:center">${r.repas_invite||0}</td>
-      <td style="text-align:center">${r.plateau_porte||0}</td>
-      <td style="text-align:center">${r.plateau_emporte||0}</td>
-      <td style="text-align:center">${r.potage||0}</td>
-      <td style="text-align:center">${r.boisson_eur ? fmt2(r.boisson_eur) : '0.00'}</td>
+      <td style="text-align:center">${r.repas_salle ? r.repas_salle : '-'}</td>
+      <td style="text-align:center">${r.repas_invite ? r.repas_invite : '-'}</td>
+      <td style="text-align:center">${r.plateau_porte ? r.plateau_porte : '-'}</td>
+      <td style="text-align:center">${r.plateau_emporte ? r.plateau_emporte : '-'}</td>
+      <td style="text-align:center">${r.potage ? r.potage : '-'}</td>
+      <td style="text-align:center">${r.boisson_eur ? fmt2(r.boisson_eur) : '-'}</td>
     </tr>`;
   }
 
@@ -10950,6 +11030,10 @@ function buildTableGauche(repasMois, mois, calc) {
         </tr>
       </tfoot>
     </table>
+    <div style="margin-top:6px;font-size:10px;color:#8a5c00;display:flex;align-items:center;gap:5px">
+      <span style="display:inline-block;width:12px;height:12px;background:#fdf0d8;border:1px solid #e59e00"></span>
+      Ligne orange = jour "repas amélioré" paramétré pour le mois
+    </div>
     ${t.nbRepasAmeliore > 0 ? `<div style="margin-top:8px;font-size:11px"><strong>Repas amélioré :</strong> ${t.nbRepasAmeliore} jour(s) — ${fmt2(calc.montants.ameliorHT)}€ HT</div>` : ''}
   `;
 }
@@ -14696,7 +14780,17 @@ async function populateFactResidents() {
   } catch(e) { allResidents = []; }
 
   // Seuls les résidents non-NR sont facturables
-  const facturables = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+  const tousNonNR = allResidents.filter(r => (r.appt||'').toUpperCase() !== 'NR');
+  const today = fmtDateISO(new Date());
+
+  // Un résident est "actif" si pas de date de sortie, ou date de sortie future/aujourd'hui
+  const estActif = r => !r.date_sortie || r.date_sortie >= today;
+  const facturables = tousNonNR.filter(estActif);
+
+  // Appartements vacants : appartements connus (présents dans la fiche résidents) où PLUS AUCUN résident n'est actif
+  const apptsAvecActif = new Set(facturables.map(r => r.appt));
+  const apptsConnus = new Set(tousNonNR.map(r => r.appt).filter(a => a));
+  const apptsVacants = Array.from(apptsConnus).filter(a => !apptsAvecActif.has(a)).sort();
 
   sel.innerHTML = '<option value="">— Choisir un résident —</option>';
   for (const r of facturables) {
@@ -14704,6 +14798,18 @@ async function populateFactResidents() {
     opt.value = r.id;
     opt.textContent = `${r.nom} ${r.prenom||''} (Appt. ${r.appt||'—'})`;
     sel.appendChild(opt);
+  }
+  if (apptsVacants.length) {
+    const optGroup = document.createElement('optgroup');
+    optGroup.label = 'Appartements vacants (aucun résident actif)';
+    for (const appt of apptsVacants) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.disabled = true;
+      opt.textContent = `Appt. ${appt} — vacant`;
+      optGroup.appendChild(opt);
+    }
+    sel.appendChild(optGroup);
   }
   if (cur && facturables.find(r => r.id == cur)) sel.value = cur;
 }
@@ -15305,15 +15411,17 @@ function buildTableGauche(repasMois, mois, calc) {
     const jourLettre = JOURS_1L[(dateObj.getDay()+6)%7];
     const r = repasByDate[dateStr] || {};
     const weekend = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
-    rows += `<tr style="${weekend?'background:#f7f7f7':''}">
-      <td style="text-align:center;font-weight:600;width:24px">${jourLettre}</td>
+    const estAmeliore = (factJoursAmeliore||[]).includes(j);
+    const rowStyle = estAmeliore ? 'background:#fdf0d8' : (weekend ? 'background:#f7f7f7' : '');
+    rows += `<tr style="${rowStyle}">
+      <td style="text-align:center;font-weight:600;width:24px">${jourLettre}${estAmeliore?' <span title="Repas amélioré" style="color:#e59e00">★</span>':''}</td>
       <td style="text-align:center;width:28px">${j}</td>
-      <td style="text-align:center">${r.repas_salle||0}</td>
-      <td style="text-align:center">${r.repas_invite||0}</td>
-      <td style="text-align:center">${r.plateau_porte||0}</td>
-      <td style="text-align:center">${r.plateau_emporte||0}</td>
-      <td style="text-align:center">${r.potage||0}</td>
-      <td style="text-align:center">${r.boisson_eur ? fmt2(r.boisson_eur) : '0.00'}</td>
+      <td style="text-align:center">${r.repas_salle ? r.repas_salle : '-'}</td>
+      <td style="text-align:center">${r.repas_invite ? r.repas_invite : '-'}</td>
+      <td style="text-align:center">${r.plateau_porte ? r.plateau_porte : '-'}</td>
+      <td style="text-align:center">${r.plateau_emporte ? r.plateau_emporte : '-'}</td>
+      <td style="text-align:center">${r.potage ? r.potage : '-'}</td>
+      <td style="text-align:center">${r.boisson_eur ? fmt2(r.boisson_eur) : '-'}</td>
     </tr>`;
   }
 
@@ -15382,6 +15490,10 @@ function buildTableGauche(repasMois, mois, calc) {
         </tr>
       </tfoot>
     </table>
+    <div style="margin-top:6px;font-size:10px;color:#8a5c00;display:flex;align-items:center;gap:5px">
+      <span style="display:inline-block;width:12px;height:12px;background:#fdf0d8;border:1px solid #e59e00"></span>
+      Ligne orange = jour "repas amélioré" paramétré pour le mois
+    </div>
     ${t.nbRepasAmeliore > 0 ? `<div style="margin-top:8px;font-size:11px"><strong>Repas amélioré :</strong> ${t.nbRepasAmeliore} jour(s) — ${fmt2(calc.montants.ameliorHT)}€ HT</div>` : ''}
   `;
 }
